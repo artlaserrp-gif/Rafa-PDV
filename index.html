@@ -963,6 +963,14 @@ function viewVendedores(){
           <div class="inf"><div class="nm">${esc(s.name)}</div><div class="sb">${vendas.length} venda(s) • total ${fmt(tot)}</div></div>
           <button class="btn sm ghost" onclick="openSellerForm('${s.id}')">Editar</button>
         </div>`; }).join('')}
+  </div>
+  <div style="height:16px"></div>
+  <div class="card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+    <div style="flex:1; min-width:180px">
+      <div class="nm" style="font-weight:800">Conta</div>
+      <div class="sb muted" style="font-size:12.5px">${esc(USER.email||'')}</div>
+    </div>
+    <button class="btn sm danger" onclick="logout()">Sair da conta</button>
   </div>`;
 }
 function enviarLogo(input){
