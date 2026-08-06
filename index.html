@@ -201,7 +201,10 @@ main{flex:1; padding:22px; max-width:1120px; margin:0 auto; width:100%; padding-
       <div id="authLogin">
         <label>E-mail</label><input id="liEmail" type="email" placeholder="voce@loja.com" autocomplete="username">
         <label>Senha</label><input id="liPass" type="password" placeholder="••••••••" autocomplete="current-password">
-        <div style="height:16px"></div>
+        <div style="text-align:right; margin-top:8px">
+          <button style="font-size:12.5px; font-weight:800; color:var(--cyan)" onclick="esqueciSenha()">Esqueci minha senha</button>
+        </div>
+        <div style="height:10px"></div>
         <button class="btn block" onclick="doLogin()">Entrar na loja</button>
       </div>
       <div id="authReg" style="display:none">
@@ -496,6 +499,37 @@ async function doRegister(){
   setAuthTab('login');
   $('#liEmail').value = email;
   toast('Quase lá! Enviamos um link de confirmação para '+email+'. Confirme e depois entre aqui.');
+}
+async function esqueciSenha(){
+  let email = $('#liEmail').value.trim().toLowerCase();
+  if(!email){
+    email = (prompt('Digite o e-mail da sua conta:')||'').trim().toLowerCase();
+    if(!email) return;
+  }
+  toast('Enviando…');
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+  if(error) return toast(traduzErro(error.message), true);
+  toast('Pronto! Enviamos um link para '+email+'. Abra o e-mail e toque no link para criar a senha nova.');
+}
+function abrirNovaSenha(){
+  openModal(`
+    <h3>Criar nova senha</h3>
+    <p class="muted" style="font-size:13px">Identidade confirmada pelo link do e-mail. Escolha sua nova senha:</p>
+    <label>Nova senha</label><input id="npSenha" type="password" placeholder="Mínimo 6 caracteres">
+    <label>Repita a senha</label><input id="npSenha2" type="password" placeholder="Digite igual">
+    <div style="height:16px"></div>
+    <button class="btn block" onclick="salvarNovaSenha()">Salvar nova senha</button>
+  `);
+}
+async function salvarNovaSenha(){
+  const s1 = $('#npSenha').value, s2 = $('#npSenha2').value;
+  if(s1.length < 6) return toast('A senha precisa ter pelo menos 6 caracteres', true);
+  if(s1 !== s2) return toast('As senhas não são iguais', true);
+  const { data, error } = await sb.auth.updateUser({ password: s1 });
+  if(error) return toast(traduzErro(error.message), true);
+  closeModal();
+  toast('Senha alterada com sucesso! ✅');
+  if(data && data.user) await afterLogin(data.user);
 }
 async function doLogin(){
   const email=$('#liEmail').value.trim().toLowerCase(), pass=$('#liPass').value;
@@ -1167,6 +1201,9 @@ function openModal(html){ $('#modalBox').innerHTML=html; $('#modalWrap').classLi
 function closeModal(){ pararScanner(); $('#modalWrap').classList.remove('open'); }
 
 /* =================== BOOT =================== */
+sb.auth.onAuthStateChange((evento)=>{
+  if(evento === 'PASSWORD_RECOVERY') abrirNovaSenha();
+});
 document.addEventListener('visibilitychange', ()=>{
   if(!document.hidden && USER){
     recarregarDoServidor(false);
