@@ -448,10 +448,28 @@ function blankDB(){ return { sellers:[], products:[], sales:[], moves:[], cash:{
 async function saveDB(){
   if(!USER) return;
   DB._client = CLIENT_ID;
-  const { error } = await sb.from('lojas')
+  let q = sb.from('lojas')
     .update({ data: DB, updated_at: new Date().toISOString() })
     .eq('user_id', USER.id);
-  if(error) toast('Sem conexão — a última alteração não foi salva na nuvem', true);
+  if(LAST_SYNC) q = q.eq('updated_at', LAST_SYNC);
+  const { data: rows, error } = await q.select('updated_at');
+  if(error){ toast('Sem conexão — a última alteração não foi salva na nuvem', true); return; }
+  if(!rows || rows.length === 0){
+    await recarregarDoServidor(true);
+    return;
+  }
+  LAST_SYNC = rows[0].updated_at;
+}
+async function recarregarDoServidor(avisar){
+  try{
+    const { data: row } = await sb.from('lojas').select('data,updated_at,store_name').eq('user_id', USER.id).maybeSingle();
+    if(row && row.data){
+      DB = row.data; LAST_SYNC = row.updated_at;
+      if(row.store_name) USER.store = row.store_name;
+      aplicarMarca(); render();
+      if(avisar) toast('⚠️ Outro aparelho salvou primeiro — tela atualizada, repita sua última ação', true);
+    }
+  }catch(e){}
 }
 
 /* =================== AUTH =================== */
@@ -500,23 +518,25 @@ async function afterLogin(user){
   if(st.fim && diasRestantes(st.fim.getTime()) <= 3){
     setTimeout(()=>toast((st.trial?'Teste gratis':'Assinatura')+' termina em '+diasRestantes(st.fim.getTime())+' dia(s)'), 1200);
   }
-  const { data: row } = await sb.from('lojas').select('store_name,data').eq('user_id', user.id).maybeSingle();
+  const { data: row } = await sb.from('lojas').select('store_name,data,updated_at').eq('user_id', user.id).maybeSingle();
   if(row && row.data){
     DB = row.data;
+    LAST_SYNC = row.updated_at;
     if(row.store_name) USER.store = row.store_name;
   } else {
     DB = blankDB();
     if(USER.name) DB.sellers.push({ id: uid(), name: USER.name });
     DB._client = CLIENT_ID;
     const meta = user.user_metadata || {};
-    let { error } = await sb.from('lojas').insert({
+    let { data: nova, error } = await sb.from('lojas').insert({
       user_id: user.id, store_name: USER.store, data: DB,
       cpf_cnpj: meta.cpf_cnpj || null, phone: meta.phone || null, plano: meta.plano || null
-    });
+    }).select('updated_at').maybeSingle();
     if(error){
-      ({ error } = await sb.from('lojas').insert({ user_id: user.id, store_name: USER.store, data: DB }));
+      ({ data: nova, error } = await sb.from('lojas').insert({ user_id: user.id, store_name: USER.store, data: DB }).select('updated_at').maybeSingle());
       if(error) toast('Não consegui criar os dados da loja: '+traduzErro(error.message), true);
     }
+    if(nova) LAST_SYNC = nova.updated_at;
   }
   enterApp();
   subscribeRealtime(user.id);
@@ -528,6 +548,7 @@ function subscribeRealtime(uid_){
       { event:'UPDATE', schema:'public', table:'lojas', filter:'user_id=eq.'+uid_ },
       payload => {
         const d = payload.new && payload.new.data;
+        if(payload.new && payload.new.updated_at) LAST_SYNC = payload.new.updated_at;
         if(!d || d._client === CLIENT_ID) return;
         DB = d;
         aplicarMarca();
@@ -967,11 +988,58 @@ function viewVendedores(){
   <div style="height:16px"></div>
   <div class="card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
     <div style="flex:1; min-width:180px">
+      <div class="nm" style="font-weight:800">Backup dos dados</div>
+      <div class="sb muted" style="font-size:12.5px">${DB.products.length} produto(s), ${DB.sales.length} venda(s). Guarde o arquivo no iCloud ou Google Drive.</div>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <button class="btn sm cyan" onclick="baixarBackup()">⬇️ Baixar backup</button>
+      <button class="btn sm ghost" onclick="document.getElementById('bkInput').click()">⬆️ Restaurar</button>
+    </div>
+    <input type="file" id="bkInput" accept=".json,application/json" style="display:none" onchange="restaurarBackup(this)">
+  </div>
+  <div style="height:16px"></div>
+  <div class="card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+    <div style="flex:1; min-width:180px">
       <div class="nm" style="font-weight:800">Conta</div>
       <div class="sb muted" style="font-size:12.5px">${esc(USER.email||'')}</div>
     </div>
     <button class="btn sm danger" onclick="logout()">Sair da conta</button>
   </div>`;
+}
+function baixarBackup(){
+  const pacote = {
+    app: 'OFIR ERP', versao: 1, geradoEm: new Date().toISOString(),
+    loja: USER.store, email: USER.email, dados: DB
+  };
+  const blob = new Blob([JSON.stringify(pacote, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  a.download = 'ofir-backup-' + d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('Backup baixado! Guarde em local seguro 🔒');
+}
+function restaurarBackup(input){
+  const file = input.files && input.files[0];
+  input.value = '';
+  if(!file) return;
+  const r = new FileReader();
+  r.onload = async () => {
+    try{
+      const pacote = JSON.parse(r.result);
+      const dados = pacote && pacote.dados;
+      if(!dados || !Array.isArray(dados.products) || !Array.isArray(dados.sales)) throw new Error('formato');
+      const dt = pacote.geradoEm ? new Date(pacote.geradoEm).toLocaleString('pt-BR') : 'data desconhecida';
+      if(!confirm('Restaurar o backup de ' + dt + '?\n\nIsso SUBSTITUI os dados atuais (' + DB.products.length + ' produtos, ' + DB.sales.length + ' vendas) pelos do arquivo (' + dados.products.length + ' produtos, ' + dados.sales.length + ' vendas).')) return;
+      DB = dados;
+      await saveDB();
+      aplicarMarca(); render();
+      toast('Backup restaurado com sucesso! ✅');
+    }catch(e){
+      toast('Este arquivo não é um backup válido do OFIR ERP', true);
+    }
+  };
+  r.readAsText(file);
 }
 function enviarLogo(input){
   const file = input.files && input.files[0];
@@ -1099,6 +1167,12 @@ function openModal(html){ $('#modalBox').innerHTML=html; $('#modalWrap').classLi
 function closeModal(){ pararScanner(); $('#modalWrap').classList.remove('open'); }
 
 /* =================== BOOT =================== */
+document.addEventListener('visibilitychange', ()=>{
+  if(!document.hidden && USER){
+    recarregarDoServidor(false);
+    subscribeRealtime(USER.id);
+  }
+});
 (async function boot(){
   try{
     const { data:{ session } } = await sb.auth.getSession();
