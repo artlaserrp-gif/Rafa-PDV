@@ -1142,10 +1142,16 @@ async function delSeller(id){
 
 /* =================== RELATÓRIOS =================== */
 let repRange = 'hoje';
+let repDia = '';
 function viewRelatorios(){
   const now = new Date(); const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   let sales = DB.sales;
-  if(repRange==='hoje') sales = sales.filter(s=>s.at>=start);
+  if(repRange==='dia' && repDia){
+    const ini = new Date(repDia+'T00:00:00').getTime();
+    const fim = ini + 864e5;
+    sales = sales.filter(s=>s.at>=ini && s.at<fim);
+  }
+  else if(repRange==='hoje') sales = sales.filter(s=>s.at>=start);
   else if(repRange==='7d') sales = sales.filter(s=>s.at>=Date.now()-7*864e5);
   else if(repRange==='30d') sales = sales.filter(s=>s.at>=Date.now()-30*864e5);
   const tot = sales.reduce((a,s)=>a+s.total,0);
@@ -1160,9 +1166,17 @@ function viewRelatorios(){
   sales.forEach(s=>s.items.forEach(i=>{ cnt[i.name]=(cnt[i.name]||0)+i.qty; }));
   const top = Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,5);
   return `
-  <div class="pageHead"><div><h2>Relatório de vendas</h2><div class="sub">${sales.length} venda(s) no período</div></div>
-    <div class="payGrid" style="margin:0; grid-template-columns:repeat(4,auto)">
-      ${[['hoje','Hoje'],['7d','7 dias'],['30d','30 dias'],['tudo','Tudo']].map(([k,l])=>`<button class="payBtn ${repRange===k?'on':''}" onclick="repRange='${k}'; render()">${l}</button>`).join('')}
+  <div class="pageHead"><div><h2>Relatório de vendas</h2><div class="sub">${repRange==='dia'&&repDia ? 'Dia '+new Date(repDia+'T12:00:00').toLocaleDateString('pt-BR')+' — ' : ''}${sales.length} venda(s) no período</div></div>
+    <div style="display:flex; gap:7px; flex-wrap:wrap; align-items:center">
+      <div class="payGrid" style="margin:0; grid-template-columns:repeat(4,auto)">
+        ${[['hoje','Hoje'],['7d','7 dias'],['30d','30 dias'],['tudo','Tudo']].map(([k,l])=>`<button class="payBtn ${repRange===k?'on':''}" onclick="repRange='${k}'; render()">${l}</button>`).join('')}
+      </div>
+      <label style="margin:0; display:flex; align-items:center; gap:6px; padding:8px 12px; border-radius:12px; border:1.5px solid ${repRange==='dia'?'var(--cyan)':'var(--line)'}; background:var(--panel2); cursor:pointer; text-transform:none; letter-spacing:0">
+        <span style="font-size:15px">📅</span>
+        <input type="date" value="${repDia}" max="${new Date().toISOString().slice(0,10)}"
+          onchange="if(this.value){ repDia=this.value; repRange='dia'; render(); }"
+          style="width:auto; padding:0; border:none; background:transparent; font-size:13.5px; font-weight:800; color:${repRange==='dia'?'var(--cyan)':'var(--muted)'}">
+      </label>
     </div></div>
   <div class="statGrid">
     <div class="stat lime"><div class="lb">Faturamento</div><div class="vl">${fmt(tot)}</div></div>
