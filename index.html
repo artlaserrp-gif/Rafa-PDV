@@ -774,23 +774,8 @@ function viewProdutos(){
   return `
   <div class="pageHead"><div><h2>Produtos e estoque</h2><div class="sub">${DB.products.length} produto(s) ${low>0?`• <span style="color:var(--amber)">${low} com estoque baixo</span>`:''}</div></div>
     <button class="btn sm" onclick="openProdForm()">+ Novo produto</button></div>
-  <div class="searchBar" style="margin-bottom:12px"><input placeholder="Buscar produto…" value="${esc(prodSearch)}" oninput="prodSearch=this.value; render()"></div>
-  <div class="card" style="padding:6px 16px">
-    ${prods.length===0?`<div class="empty"><div class="big">📦</div>Cadastre seus acessórios: capinhas, películas, fones, carregadores…</div>`:
-      prods.map(p=>`
-      <div class="listRow">
-        <div class="inf">
-          <div class="nm">${esc(p.name)} ${p.stock<=(p.min||3)?'<span class="tag amber">Estoque baixo</span>':''}</div>
-          <div class="sb">${p.code?'Cód. '+esc(p.code)+' • ':''}${esc(p.cat||'Geral')} • Custo ${fmt(p.cost||0)}</div>
-        </div>
-        <div style="text-align:right">
-          <div class="money" style="color:var(--lime)">${fmt(p.price)}</div>
-          <div class="sb" style="color:${p.stock<=0?'var(--red)':'var(--muted)'}">${p.stock} un.</div>
-        </div>
-        <button class="btn sm cyan" onclick="openStockForm('${p.id}')">↕ Estoque</button>
-        <button class="btn sm ghost" onclick="openProdForm('${p.id}')">Editar</button>
-      </div>`).join('')}
-  </div>
+  <div class="searchBar" style="margin-bottom:12px"><input placeholder="Buscar produto…" value="${esc(prodSearch)}" oninput="prodSearch=this.value; refreshProdList()"></div>
+  <div class="card" id="listaProdutos" style="padding:6px 16px">${prodRowsHTML(prods)}</div>
   <div style="height:16px"></div>
   <h3 style="font-size:17px; margin-bottom:8px">Movimentações recentes</h3>
   <div class="card" style="padding:6px 16px">
@@ -802,6 +787,28 @@ function viewProdutos(){
         <div class="money">${m.type==='entrada'?'+':'−'}${m.qty} un.</div>
       </div>`).join('')}
   </div>`;
+}
+function prodRowsHTML(prods){
+  return prods.length===0?`<div class="empty"><div class="big">📦</div>Cadastre seus acessórios: capinhas, películas, fones, carregadores…</div>`:
+    prods.map(p=>`
+    <div class="listRow">
+      <div class="inf">
+        <div class="nm">${esc(p.name)} ${p.stock<=(p.min||3)?'<span class="tag amber">Estoque baixo</span>':''}</div>
+        <div class="sb">${p.code?'Cód. '+esc(p.code)+' • ':''}${esc(p.cat||'Geral')} • Custo ${fmt(p.cost||0)}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="money" style="color:var(--lime)">${fmt(p.price)}</div>
+        <div class="sb" style="color:${p.stock<=0?'var(--red)':'var(--muted)'}">${p.stock} un.</div>
+      </div>
+      <button class="btn sm cyan" onclick="openStockForm('${p.id}')">↕ Estoque</button>
+      <button class="btn sm ghost" onclick="openProdForm('${p.id}')">Editar</button>
+    </div>`).join('');
+}
+function refreshProdList(){
+  const el = document.getElementById('listaProdutos');
+  if(!el) return;
+  const prods = DB.products.filter(p=>!prodSearch || (p.name+' '+(p.code||'')).toLowerCase().includes(prodSearch.toLowerCase()));
+  el.innerHTML = prodRowsHTML(prods);
 }
 function openProdForm(id){
   window.EDITING_ID = id || '';
@@ -1143,18 +1150,23 @@ async function delSeller(id){
 /* =================== RELATÓRIOS =================== */
 let repRange = 'hoje';
 let repDia = '';
-function viewRelatorios(){
+function vendasDoPeriodo(){
   const now = new Date(); const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  let sales = DB.sales;
+  let sales = DB.sales, label = 'Todo o período';
   if(repRange==='dia' && repDia){
     const ini = new Date(repDia+'T00:00:00').getTime();
-    const fim = ini + 864e5;
-    sales = sales.filter(s=>s.at>=ini && s.at<fim);
+    sales = sales.filter(s=>s.at>=ini && s.at<ini+864e5);
+    label = 'Dia ' + new Date(repDia+'T12:00:00').toLocaleDateString('pt-BR');
   }
-  else if(repRange==='hoje') sales = sales.filter(s=>s.at>=start);
-  else if(repRange==='7d') sales = sales.filter(s=>s.at>=Date.now()-7*864e5);
-  else if(repRange==='30d') sales = sales.filter(s=>s.at>=Date.now()-30*864e5);
+  else if(repRange==='hoje'){ sales = sales.filter(s=>s.at>=start); label = 'Hoje ('+now.toLocaleDateString('pt-BR')+')'; }
+  else if(repRange==='7d'){ sales = sales.filter(s=>s.at>=Date.now()-7*864e5); label = 'Últimos 7 dias'; }
+  else if(repRange==='30d'){ sales = sales.filter(s=>s.at>=Date.now()-30*864e5); label = 'Últimos 30 dias'; }
+  return { sales, label };
+}
+function viewRelatorios(){
+  const { sales } = vendasDoPeriodo();
   const tot = sales.reduce((a,s)=>a+s.total,0);
+  const descTot = sales.reduce((a,s)=>a+(s.discount||0),0);
   const itens = sales.reduce((a,s)=>a+s.items.reduce((b,i)=>b+i.qty,0),0);
   const lucro = sales.reduce((a,s)=>a + s.items.reduce((b,i)=>{
     const p = DB.products.find(x=>x.id===i.pid);
@@ -1177,10 +1189,12 @@ function viewRelatorios(){
           onchange="if(this.value){ repDia=this.value; repRange='dia'; render(); }"
           style="width:auto; padding:0; border:none; background:transparent; font-size:13.5px; font-weight:800; color:${repRange==='dia'?'var(--cyan)':'var(--muted)'}">
       </label>
+      <button class="payBtn" onclick="baixarRelatorioPDF()" title="Baixar relatório em PDF">📄 PDF</button>
     </div></div>
   <div class="statGrid">
     <div class="stat lime"><div class="lb">Faturamento</div><div class="vl">${fmt(tot)}</div></div>
     <div class="stat cyan"><div class="lb">Lucro estimado</div><div class="vl">${fmt(lucro)}</div></div>
+    <div class="stat"><div class="lb">Descontos dados</div><div class="vl" style="color:var(--amber)">${fmt(descTot)}</div></div>
     <div class="stat"><div class="lb">Itens vendidos</div><div class="vl">${itens}</div></div>
     <div class="stat"><div class="lb">Ticket médio</div><div class="vl">${fmt(ticket)}</div></div>
   </div>
@@ -1192,10 +1206,70 @@ function viewRelatorios(){
       sales.map(s=>`
       <div class="listRow" style="cursor:pointer" onclick="openSaleDetail('${s.id}')">
         <div class="inf"><div class="nm">${fmt(s.total)} • ${esc(s.payment)}</div>
-        <div class="sb">${dstr(s.at)} • ${esc(s.sellerName)} • ${s.items.reduce((a,i)=>a+i.qty,0)} item(ns)</div></div>
+        <div class="sb">${dstr(s.at)} • ${esc(s.sellerName)} • ${s.items.reduce((a,i)=>a+i.qty,0)} item(ns)${s.discount>0?' • <span style=\'color:var(--amber)\'>desc. '+fmt(s.discount)+'</span>':''}</div></div>
         <span class="muted">›</span>
       </div>`).join('')}
   </div>`;
+}
+async function baixarRelatorioPDF(){
+  const { sales, label } = vendasDoPeriodo();
+  if(sales.length === 0) return toast('Nenhuma venda no período selecionado', true);
+  toast('Gerando PDF…');
+  try{
+    if(!window.jspdf) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    if(!window.jspdf.jsPDF.API.autoTable) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+  }catch(e){ return toast('Preciso de internet para gerar o PDF', true); }
+  const money = v => fmt(v||0).replace(/\u00a0/g,' ');
+  const ord = sales.slice().sort((a,b)=>a.at-b.at);
+  const tot = ord.reduce((a,s)=>a+s.total,0);
+  const descTot = ord.reduce((a,s)=>a+(s.discount||0),0);
+  const itens = ord.reduce((a,s)=>a+s.items.reduce((b,i)=>b+i.qty,0),0);
+  const lucro = ord.reduce((a,s)=>a + s.items.reduce((b,i)=>{
+    const p = DB.products.find(x=>x.id===i.pid);
+    return b + (i.price-(p?p.cost||0:0))*i.qty;
+  },0) - (s.discount||0), 0);
+  const byPay = {};
+  ord.forEach(s=>{ byPay[s.payment]=(byPay[s.payment]||0)+s.total; });
+
+  const doc = new window.jspdf.jsPDF();
+  doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(10,15,26);
+  doc.text('OFIR ERP — Relatório de vendas', 14, 16);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(70,80,95);
+  doc.text('Loja: ' + (USER.store||''), 14, 23);
+  doc.text('Período: ' + label, 14, 28.5);
+  doc.text('Gerado em ' + new Date().toLocaleString('pt-BR'), 14, 34);
+  doc.setDrawColor(214,219,228); doc.line(14, 37.5, 196, 37.5);
+  doc.setFontSize(10.5); doc.setTextColor(30,38,52);
+  doc.text('Vendas: ' + ord.length + '   |   Itens: ' + itens + '   |   Faturamento: ' + money(tot) + '   |   Descontos: ' + money(descTot), 14, 44);
+  doc.text('Lucro estimado: ' + money(lucro) + '   |   Ticket médio: ' + money(ord.length?tot/ord.length:0), 14, 50);
+  doc.text('Por pagamento: ' + Object.entries(byPay).map(([k,v])=>k+' '+money(v)).join('   •   '), 14, 56);
+
+  doc.autoTable({
+    startY: 61,
+    head: [['Hora','Vendedor(a)','Itens','Subtotal','Desconto','Total','Pagto']],
+    body: ord.map(s=>[
+      dstr(s.at),
+      s.sellerName || '-',
+      s.items.map(i=>i.qty+'x '+i.name).join(', '),
+      money(s.subtotal),
+      s.discount>0 ? money(s.discount) : '-',
+      money(s.total),
+      s.payment
+    ]),
+    foot: [['', '', 'TOTAIS', money(ord.reduce((a,s)=>a+s.subtotal,0)), money(descTot), money(tot), '']],
+    styles: { font:'helvetica', fontSize:8, cellPadding:2, textColor:[30,38,52] },
+    headStyles: { fillColor:[10,15,26], textColor:[240,185,79], fontStyle:'bold' },
+    footStyles: { fillColor:[242,244,248], textColor:[10,15,26], fontStyle:'bold' },
+    alternateRowStyles: { fillColor:[247,249,252] },
+    columnStyles: { 2:{ cellWidth:62 }, 3:{ halign:'right' }, 4:{ halign:'right' }, 5:{ halign:'right' } },
+    didDrawPage: (d)=>{
+      doc.setFontSize(8); doc.setTextColor(140,150,165);
+      doc.text('OFIR ERP • ' + (USER.store||'') + ' • página ' + doc.internal.getNumberOfPages(), 14, doc.internal.pageSize.getHeight()-8);
+    }
+  });
+  const nome = 'relatorio-vendas-' + (repRange==='dia'&&repDia ? repDia : new Date().toISOString().slice(0,10)) + '.pdf';
+  doc.save(nome);
+  toast('Relatório baixado! 📄');
 }
 function openSaleDetail(id){
   const s = DB.sales.find(x=>x.id===id);
