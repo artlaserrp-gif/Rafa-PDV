@@ -770,10 +770,17 @@ async function finishSale(){
 /* =================== PRODUTOS =================== */
 function viewProdutos(){
   const prods = DB.products.filter(p=>!prodSearch || (p.name+' '+(p.code||'')).toLowerCase().includes(prodSearch.toLowerCase()));
-  const low = DB.products.filter(p=>p.stock<=(p.min||3)).length;
+  const low = DB.products.filter(p=>p.stock<=(p.min||5)).length;
   return `
   <div class="pageHead"><div><h2>Produtos e estoque</h2><div class="sub">${DB.products.length} produto(s) ${low>0?`• <span style="color:var(--amber)">${low} com estoque baixo</span>`:''}</div></div>
     <button class="btn sm" onclick="openProdForm()">+ Novo produto</button></div>
+  ${low>0?`<div class="card" style="margin-bottom:12px; border-color:rgba(242,193,78,.5); display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+    <div style="flex:1; min-width:180px">
+      <div class="nm" style="font-weight:800; color:var(--amber)">⚠️ Estoque baixo</div>
+      <div class="sb muted" style="font-size:12.5px">${low} produto(s) no limite mínimo. Gere o pedido de compra para repor.</div>
+    </div>
+    <button class="btn sm" onclick="gerarPedidoPDF()">📄 Gerar pedido</button>
+  </div>`:''}
   <div class="searchBar" style="margin-bottom:12px"><input placeholder="Buscar produto…" value="${esc(prodSearch)}" oninput="prodSearch=this.value; refreshProdList()"></div>
   <div class="card" id="listaProdutos" style="padding:6px 16px">${prodRowsHTML(prods)}</div>
   <div style="height:16px"></div>
@@ -793,7 +800,7 @@ function prodRowsHTML(prods){
     prods.map(p=>`
     <div class="listRow">
       <div class="inf">
-        <div class="nm">${esc(p.name)} ${p.stock<=(p.min||3)?'<span class="tag amber">Estoque baixo</span>':''}</div>
+        <div class="nm">${esc(p.name)} ${p.stock<=(p.min||5)?'<span class="tag amber">Estoque baixo</span>':''}</div>
         <div class="sb">${p.code?'Cód. '+esc(p.code)+' • ':''}${esc(p.cat||'Geral')} • Custo ${fmt(p.cost||0)}</div>
       </div>
       <div style="text-align:right">
@@ -809,6 +816,54 @@ function refreshProdList(){
   if(!el) return;
   const prods = DB.products.filter(p=>!prodSearch || (p.name+' '+(p.code||'')).toLowerCase().includes(prodSearch.toLowerCase()));
   el.innerHTML = prodRowsHTML(prods);
+}
+async function gerarPedidoPDF(){
+  const lows = DB.products.filter(p=>p.stock<=(p.min||5)).sort((a,b)=>a.name.localeCompare(b.name));
+  if(lows.length === 0) return toast('Nenhum produto com estoque baixo 🎉');
+  toast('Gerando pedido…');
+  try{
+    if(!window.jspdf) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    if(!window.jspdf.jsPDF.API.autoTable) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+  }catch(e){ return toast('Preciso de internet para gerar o PDF', true); }
+  const money = v => fmt(v||0).replace(/\u00a0/g,' ');
+  const sugestao = p => Math.max((p.min||5)*2 - p.stock, 1);
+  const custoTotal = lows.reduce((a,p)=>a + sugestao(p)*(p.cost||0), 0);
+
+  const doc = new window.jspdf.jsPDF();
+  doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(10,15,26);
+  doc.text('Pedido de compra — Reposição de estoque', 14, 16);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(70,80,95);
+  doc.text('Loja: ' + (USER.store||''), 14, 23);
+  doc.text('Data: ' + new Date().toLocaleString('pt-BR'), 14, 28.5);
+  doc.text('Produtos no limite mínimo: ' + lows.length, 14, 34);
+  doc.setDrawColor(214,219,228); doc.line(14, 37.5, 196, 37.5);
+
+  doc.autoTable({
+    startY: 42,
+    head: [['Produto','Código','Categoria','Estoque','Mínimo','Qtd sugerida','Custo un.','Custo total']],
+    body: lows.map(p=>[
+      p.name,
+      p.code || '-',
+      p.cat || '-',
+      String(p.stock),
+      String(p.min||5),
+      String(sugestao(p)),
+      p.cost ? money(p.cost) : '-',
+      p.cost ? money(sugestao(p)*p.cost) : '-'
+    ]),
+    foot: [['','','','','','','ESTIMATIVA', money(custoTotal)]],
+    styles: { font:'helvetica', fontSize:8.5, cellPadding:2, textColor:[30,38,52] },
+    headStyles: { fillColor:[10,15,26], textColor:[240,185,79], fontStyle:'bold' },
+    footStyles: { fillColor:[242,244,248], textColor:[10,15,26], fontStyle:'bold' },
+    alternateRowStyles: { fillColor:[247,249,252] },
+    columnStyles: { 0:{ cellWidth:48 }, 3:{ halign:'center' }, 4:{ halign:'center' }, 5:{ halign:'center', fontStyle:'bold' }, 6:{ halign:'right' }, 7:{ halign:'right' } },
+    didDrawPage: ()=>{
+      doc.setFontSize(8); doc.setTextColor(140,150,165);
+      doc.text('Gerado pelo OFIR ERP • Qtd sugerida repõe até 2x o estoque mínimo', 14, doc.internal.pageSize.getHeight()-8);
+    }
+  });
+  doc.save('pedido-compra-' + new Date().toISOString().slice(0,10) + '.pdf');
+  toast('Pedido de compra baixado! 📄');
 }
 function openProdForm(id){
   window.EDITING_ID = id || '';
@@ -827,7 +882,7 @@ function openProdForm(id){
     </div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
       <div><label>${p?'Estoque atual':'Estoque inicial'}</label><input id="pfStock" type="number" value="${p?p.stock:''}" placeholder="0" ${p?'disabled title="Use Entrada/Saída para ajustar"':''}></div>
-      <div><label>Estoque mínimo</label><input id="pfMin" type="number" value="${p?p.min||3:3}"></div>
+      <div><label>Estoque mínimo</label><input id="pfMin" type="number" value="${p?p.min||5:5}"></div>
     </div>
     <div style="height:16px"></div>
     <button class="btn block" onclick="saveProd('${id||''}')">${p?'Salvar alterações':'Cadastrar produto'}</button>
@@ -852,7 +907,7 @@ async function saveProd(id){
     Object.assign(p,{ name, cat:$('#pfCat').value, code:$('#pfCode').value.trim(), cost:num($('#pfCost').value), price, min:num($('#pfMin').value) });
   } else {
     const stock = Math.max(0, Math.round(num($('#pfStock').value)));
-    const p = { id:uid(), name, cat:$('#pfCat').value, code:$('#pfCode').value.trim(), cost:num($('#pfCost').value), price, stock, min:num($('#pfMin').value)||3 };
+    const p = { id:uid(), name, cat:$('#pfCat').value, code:$('#pfCode').value.trim(), cost:num($('#pfCost').value), price, stock, min:num($('#pfMin').value)||5 };
     DB.products.push(p);
     if(stock>0) DB.moves.unshift({ id:uid(), at:Date.now(), pid:p.id, name, type:'entrada', qty:stock, note:'Estoque inicial' });
   }
