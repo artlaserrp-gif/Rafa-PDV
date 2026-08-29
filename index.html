@@ -127,6 +127,8 @@ main{flex:1; padding:22px; max-width:1120px; margin:0 auto; width:100%; padding-
 .qtyCtl{display:flex; align-items:center; gap:2px}
 .qtyCtl button{width:27px; height:27px; border-radius:9px; background:var(--panel); font-weight:900; font-size:15px; color:var(--lime); border:1px solid var(--line)}
 .qtyCtl span{min-width:24px; text-align:center; font-weight:800; font-size:13.5px}
+.qtyInput{width:40px; height:27px; padding:0; text-align:center; font-weight:800; font-size:13.5px; border-radius:9px; background:var(--panel); border:1px solid var(--line); color:var(--paper)}
+.qtyInput::-webkit-outer-spin-button,.qtyInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0}
 .totRow{display:flex; justify-content:space-between; padding:5px 0; font-size:14px}
 .totRow.big{font-size:19px; font-weight:800; border-top:1.5px dashed var(--line); margin-top:6px; padding-top:10px}
 .payGrid{display:grid; grid-template-columns:1fr 1fr; gap:7px; margin:10px 0}
@@ -321,19 +323,59 @@ function abrirScanner(alvo){
   openModal(`
     <h3>Ler código de barras</h3>
     <p class="muted" style="font-size:13px; margin-bottom:8px">Aponte a câmera para o código do produto</p>
-    <video id="scanVideo" playsinline muted style="width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:14px; background:#000"></video>
-    <div id="scanStatus" style="text-align:center; font-size:13.5px; min-height:22px; margin:8px 0; color:var(--lime); font-weight:800"></div>
+    <video id="scanVideo" autoplay playsinline muted webkit-playsinline style="width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:14px; background:#000"></video>
+    <div id="scanStatus" style="text-align:center; font-size:13.5px; min-height:22px; margin:8px 0; color:var(--lime); font-weight:800">Abrindo câmera…</div>
+    <div id="scanManual" style="display:none; margin-top:6px">
+      <label>Não abriu a câmera? Digite o código</label>
+      <div style="display:flex; gap:8px"><input id="scanManualInp" inputmode="numeric" placeholder="Código de barras" onkeydown="if(event.key==='Enter'){event.preventDefault(); confirmarManual();}">
+      <button class="btn sm cyan" style="flex:none" onclick="confirmarManual()">OK</button></div>
+    </div>
     <button class="btn ghost block sm" onclick="closeModal()">Fechar câmera</button>
   `);
   iniciarScanner();
 }
 async function iniciarScanner(){
+  const st = document.getElementById('scanStatus');
+  const mostrarManual = () => { const m=document.getElementById('scanManual'); if(m) m.style.display='block'; };
+  if(!(window.isSecureContext || location.hostname==='localhost')){
+    if(st){ st.style.color='var(--red)'; st.textContent='A câmera só funciona em site https.'; }
+    mostrarManual(); return;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    if(st){ st.style.color='var(--red)'; st.textContent='Este navegador não suporta câmera aqui. Digite o código abaixo.'; }
+    mostrarManual(); return;
+  }
+  let stream;
   try{
-    if(!window.ZXing) await carregarScript('https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js');
+    // pede a permissao de forma explicita primeiro (mais confiavel no Safari)
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+  }catch(e){
+    if(st){
+      st.style.color='var(--red)';
+      if(e.name==='NotAllowedError' || e.name==='PermissionDeniedError')
+        st.textContent = 'Permissão de câmera negada. Vá em Ajustes do iPhone → Safari → Câmera → Permitir, ou toque no ícone "aA" na barra de endereço.';
+      else if(e.name==='NotFoundError')
+        st.textContent = 'Nenhuma câmera encontrada neste aparelho.';
+      else if(e.name==='NotReadableError')
+        st.textContent = 'A câmera está sendo usada por outro aplicativo.';
+      else
+        st.textContent = 'Não consegui abrir a câmera. Digite o código abaixo.';
+    }
+    mostrarManual(); return;
+  }
+  try{
+    const video = document.getElementById('scanVideo');
+    if(!video){ stream.getTracks().forEach(t=>t.stop()); return; }
+    video.srcObject = stream; video.muted = true; video.playsInline = true;
+    try{ await video.play(); }catch(e){}
+    if(!window.ZXing){
+      try{ await carregarScript('https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js'); }
+      catch(e){ await carregarScript('https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'); }
+    }
     SCAN.reader = new ZXing.BrowserMultiFormatReader();
-    const cams = await SCAN.reader.listVideoInputDevices();
-    const tras = cams.find(c=>/back|tras|rear|environment/i.test(c.label)) || cams[cams.length-1];
-    SCAN.reader.decodeFromVideoDevice(tras ? tras.deviceId : undefined, 'scanVideo', (result)=>{
+    SCAN.stream = stream;
+    if(st){ st.style.color='var(--cyan)'; st.textContent = 'Aponte para o código de barras'; }
+    SCAN.reader.decodeFromStream(stream, 'scanVideo', (result)=>{
       if(!result) return;
       const code = result.getText().trim();
       const agora = Date.now();
@@ -342,17 +384,30 @@ async function iniciarScanner(){
       tratarCodigo(code);
     });
   }catch(e){
-    const st = document.getElementById('scanStatus');
-    if(st){ st.style.color='var(--red)'; st.textContent='Não consegui abrir a câmera. Verifique a permissão do navegador.'; }
+    if(st){ st.style.color='var(--red)'; st.textContent='Não consegui ler o código automaticamente. Digite abaixo.'; }
+    mostrarManual();
   }
+}
+function confirmarManual(){
+  const inp = document.getElementById('scanManualInp');
+  const code = inp ? inp.value.trim() : '';
+  if(!code) return;
+  tratarCodigo(code);
+  if(inp) inp.value='';
 }
 function pararScanner(){
   if(SCAN.reader){ try{ SCAN.reader.reset(); }catch(e){} SCAN.reader = null; }
+  if(SCAN.stream){ try{ SCAN.stream.getTracks().forEach(t=>t.stop()); }catch(e){} SCAN.stream = null; }
+}
+function acharProdutoPorCodigo(code){
+  const norm = s => (s||'').toString().trim().replace(/^0+(?=\d)/,'');
+  const alvo = norm(code);
+  return DB.products.find(x => norm(x.code) === alvo);
 }
 function tratarCodigo(code){
   const st = document.getElementById('scanStatus');
   if(SCAN.alvo === 'pdv'){
-    const p = DB.products.find(x => (x.code||'').trim() === code);
+    const p = acharProdutoPorCodigo(code);
     if(p){
       if(p.stock <= (CART.find(c=>c.pid===p.id)?.qty || 0)){
         if(st){ st.style.color='var(--red)'; st.textContent='Sem estoque: '+p.name; }
@@ -381,7 +436,7 @@ function scanParaCadastro(){
 function pdvEnter(inp){
   const c = inp.value.trim();
   if(!c) return;
-  const p = DB.products.find(x => (x.code||'').trim() === c);
+  const p = acharProdutoPorCodigo(c);
   if(p){
     addCart(p.id); bip();
     inp.value=''; pdvSearch=''; refreshProdGrid();
@@ -447,7 +502,7 @@ let CART = [];           // {pid, qty}
 let PDV = { seller:'', pay:'Dinheiro', discount:0, received:'' };
 let prodSearch = '', pdvSearch = '';
 
-function blankDB(){ return { sellers:[], products:[], sales:[], moves:[], cash:{ open:false, openedAt:null, initial:0, entries:[], sessions:[] } }; }
+function blankDB(){ return { sellers:[], products:[], sales:[], moves:[], cancelPassHash:null, cash:{ open:false, openedAt:null, initial:0, entries:[], sessions:[] } }; }
 async function saveDB(){
   if(!USER) return;
   DB._client = CLIENT_ID;
@@ -680,7 +735,12 @@ function cartHTML(){
           return `<div class="cartItem">
             <div class="inf"><div class="nm">${esc(p.name)}</div><div class="un">${fmt(p.price)} un.</div></div>
             <div class="qtyCtl">
-              <button onclick="chQty('${p.id}',-1)">−</button><span>${c.qty}</span><button onclick="chQty('${p.id}',1)">+</button>
+              <button onclick="chQty('${p.id}',-1)">−</button>
+              <input type="number" inputmode="numeric" min="1" value="${c.qty}" class="qtyInput"
+                onfocus="this.select()"
+                onchange="setQty('${p.id}', this.value)"
+                onkeydown="if(event.key==='Enter'){ this.blur(); }">
+              <button onclick="chQty('${p.id}',1)">+</button>
             </div>
             <div class="money" style="min-width:70px; text-align:right">${fmt(p.price*c.qty)}</div>
           </div>`; }).join('')}
@@ -726,6 +786,15 @@ function addCart(pid){
   const inCart = item?item.qty:0;
   if(inCart+1 > p.stock) return toast('Estoque insuficiente de "'+p.name+'"', true);
   if(item) item.qty++; else CART.push({pid, qty:1});
+  refreshCart();
+}
+function setQty(pid, val){
+  const item = CART.find(c=>c.pid===pid); if(!item) return;
+  const p = DB.products.find(x=>x.id===pid);
+  let q = Math.round(num(val));
+  if(!q || q<1) q = 1;
+  if(q > p.stock){ toast('Estoque insuficiente — máximo '+p.stock+' un.', true); q = p.stock; }
+  item.qty = q;
   refreshCart();
 }
 function chQty(pid, d){
@@ -779,7 +848,7 @@ function viewProdutos(){
       <div class="nm" style="font-weight:800; color:var(--amber)">⚠️ Estoque baixo</div>
       <div class="sb muted" style="font-size:12.5px">${low} produto(s) no limite mínimo. Gere o pedido de compra para repor.</div>
     </div>
-    <button class="btn sm" onclick="gerarPedidoPDF()">📄 Gerar pedido</button>
+    <button class="btn sm" onclick="abrirEditorPedido()">📄 Gerar pedido</button>
   </div>`:''}
   <div class="searchBar" style="margin-bottom:12px"><input placeholder="Buscar produto…" value="${esc(prodSearch)}" oninput="prodSearch=this.value; refreshProdList()"></div>
   <div class="card" id="listaProdutos" style="padding:6px 16px">${prodRowsHTML(prods)}</div>
@@ -817,17 +886,57 @@ function refreshProdList(){
   const prods = DB.products.filter(p=>!prodSearch || (p.name+' '+(p.code||'')).toLowerCase().includes(prodSearch.toLowerCase()));
   el.innerHTML = prodRowsHTML(prods);
 }
-async function gerarPedidoPDF(){
+let PEDIDO_ITEMS = [];
+function abrirEditorPedido(){
   const lows = DB.products.filter(p=>p.stock<=(p.min||5)).sort((a,b)=>a.name.localeCompare(b.name));
   if(lows.length === 0) return toast('Nenhum produto com estoque baixo 🎉');
+  const sugestao = p => Math.max((p.min||5)*2 - p.stock, 2);
+  PEDIDO_ITEMS = lows.map(p=>({ pid:p.id, name:p.name, code:p.code||'', cat:p.cat||'', stock:p.stock, min:p.min||5, cost:p.cost||0, qty:sugestao(p), incluir:true }));
+  openModal(pedidoEditorHTML());
+}
+function pedidoEditorHTML(){
+  const money = v => fmt(v||0);
+  const incluidos = PEDIDO_ITEMS.filter(i=>i.incluir);
+  const total = incluidos.reduce((a,i)=>a+i.qty*i.cost,0);
+  return `
+    <h3>Pedido de compra</h3>
+    <p class="muted" style="font-size:13px; margin-bottom:8px">Ajuste as quantidades antes de gerar o PDF. Desmarque o que não quiser incluir.</p>
+    <div style="display:flex; flex-direction:column; gap:8px; max-height:340px; overflow:auto">
+      ${PEDIDO_ITEMS.map((it,idx)=>`
+        <div class="cartItem" style="opacity:${it.incluir?'1':'.45'}">
+          <input type="checkbox" ${it.incluir?'checked':''} onchange="PEDIDO_ITEMS[${idx}].incluir=this.checked; atualizarPedidoEditor()" style="width:18px; height:18px; flex:none">
+          <div class="inf">
+            <div class="nm">${esc(it.name)}</div>
+            <div class="un">estoque ${it.stock} • mín. ${it.min}${it.code?' • cód. '+esc(it.code):''}</div>
+          </div>
+          <div class="qtyCtl">
+            <button onclick="PEDIDO_ITEMS[${idx}].qty=Math.max(1,PEDIDO_ITEMS[${idx}].qty-1); atualizarPedidoEditor()">−</button>
+            <input type="number" inputmode="numeric" min="1" value="${it.qty}" class="qtyInput"
+              onfocus="this.select()"
+              onchange="PEDIDO_ITEMS[${idx}].qty=Math.max(1,Math.round(num(this.value))||1); atualizarPedidoEditor()">
+            <button onclick="PEDIDO_ITEMS[${idx}].qty++; atualizarPedidoEditor()">+</button>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div id="pedidoTotal" class="totRow big" style="margin-top:10px"><span>Estimativa (${incluidos.length} item${incluidos.length===1?'':'s'})</span><span class="money" style="color:var(--lime)">${money(total)}</span></div>
+    <div style="height:12px"></div>
+    <button class="btn block" onclick="baixarPedidoPDF()">📄 Gerar PDF do pedido</button>
+  `;
+}
+function atualizarPedidoEditor(){
+  const box = $('#modalBox');
+  if(box) box.innerHTML = pedidoEditorHTML();
+}
+async function baixarPedidoPDF(){
+  const itens = PEDIDO_ITEMS.filter(i=>i.incluir && i.qty>0);
+  if(itens.length === 0) return toast('Marque ao menos um produto', true);
   toast('Gerando pedido…');
   try{
     if(!window.jspdf) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     if(!window.jspdf.jsPDF.API.autoTable) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
   }catch(e){ return toast('Preciso de internet para gerar o PDF', true); }
   const money = v => fmt(v||0).replace(/\u00a0/g,' ');
-  const sugestao = p => Math.max((p.min||5)*2 - p.stock, 1);
-  const custoTotal = lows.reduce((a,p)=>a + sugestao(p)*(p.cost||0), 0);
+  const custoTotal = itens.reduce((a,i)=>a + i.qty*i.cost, 0);
 
   const doc = new window.jspdf.jsPDF();
   doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(10,15,26);
@@ -835,23 +944,17 @@ async function gerarPedidoPDF(){
   doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(70,80,95);
   doc.text('Loja: ' + (USER.store||''), 14, 23);
   doc.text('Data: ' + new Date().toLocaleString('pt-BR'), 14, 28.5);
-  doc.text('Produtos no limite mínimo: ' + lows.length, 14, 34);
+  doc.text('Itens no pedido: ' + itens.length, 14, 34);
   doc.setDrawColor(214,219,228); doc.line(14, 37.5, 196, 37.5);
 
   doc.autoTable({
     startY: 42,
-    head: [['Produto','Código','Categoria','Estoque','Mínimo','Qtd sugerida','Custo un.','Custo total']],
-    body: lows.map(p=>[
-      p.name,
-      p.code || '-',
-      p.cat || '-',
-      String(p.stock),
-      String(p.min||5),
-      String(sugestao(p)),
-      p.cost ? money(p.cost) : '-',
-      p.cost ? money(sugestao(p)*p.cost) : '-'
+    head: [['Produto','Código','Categoria','Estoque','Mínimo','Qtd pedida','Custo un.','Custo total']],
+    body: itens.map(i=>[
+      i.name, i.code || '-', i.cat || '-', String(i.stock), String(i.min),
+      String(i.qty), i.cost ? money(i.cost) : '-', i.cost ? money(i.qty*i.cost) : '-'
     ]),
-    foot: [['','','','','','','ESTIMATIVA', money(custoTotal)]],
+    foot: [['','','','','','TOTAL', '', money(custoTotal)]],
     styles: { font:'helvetica', fontSize:8.5, cellPadding:2, textColor:[30,38,52] },
     headStyles: { fillColor:[10,15,26], textColor:[240,185,79], fontStyle:'bold' },
     footStyles: { fillColor:[242,244,248], textColor:[10,15,26], fontStyle:'bold' },
@@ -859,10 +962,11 @@ async function gerarPedidoPDF(){
     columnStyles: { 0:{ cellWidth:48 }, 3:{ halign:'center' }, 4:{ halign:'center' }, 5:{ halign:'center', fontStyle:'bold' }, 6:{ halign:'right' }, 7:{ halign:'right' } },
     didDrawPage: ()=>{
       doc.setFontSize(8); doc.setTextColor(140,150,165);
-      doc.text('Gerado pelo OFIR ERP • Qtd sugerida repõe até 2x o estoque mínimo', 14, doc.internal.pageSize.getHeight()-8);
+      doc.text('Gerado pelo OFIR ERP • quantidades definidas pela loja', 14, doc.internal.pageSize.getHeight()-8);
     }
   });
   doc.save('pedido-compra-' + new Date().toISOString().slice(0,10) + '.pdf');
+  closeModal();
   toast('Pedido de compra baixado! 📄');
 }
 function openProdForm(id){
@@ -949,7 +1053,7 @@ async function saveMove(id){
 function cashSummary(){
   const c = DB.cash;
   if(!c.open) return null;
-  const sales = DB.sales.filter(s=>s.at>=c.openedAt);
+  const sales = DB.sales.filter(s=>s.at>=c.openedAt && !s.cancelled);
   const byPay = {};
   let totVendas=0;
   sales.forEach(s=>{ byPay[s.payment]=(byPay[s.payment]||0)+s.total; totVendas+=s.total; });
@@ -1096,11 +1200,43 @@ function viewVendedores(){
   <div style="height:16px"></div>
   <div class="card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
     <div style="flex:1; min-width:180px">
+      <div class="nm" style="font-weight:800">Segurança • Senha de cancelamento</div>
+      <div class="sb muted" style="font-size:12.5px">${DB.cancelPassHash?'Configurada — exigida para cancelar qualquer venda.':'Ainda não configurada. Defina para poder cancelar vendas com segurança.'}</div>
+    </div>
+    <button class="btn sm cyan" onclick="openCancelPassForm()">${DB.cancelPassHash?'🔒 Trocar senha':'🔒 Definir senha'}</button>
+  </div>
+  <div style="height:16px"></div>
+  <div class="card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+    <div style="flex:1; min-width:180px">
       <div class="nm" style="font-weight:800">Conta</div>
       <div class="sb muted" style="font-size:12.5px">${esc(USER.email||'')}</div>
     </div>
     <button class="btn sm danger" onclick="logout()">Sair da conta</button>
   </div>`;
+}
+function openCancelPassForm(){
+  openModal(`
+    <h3>${DB.cancelPassHash?'Trocar':'Definir'} senha de cancelamento</h3>
+    <p class="muted" style="font-size:13px">Peça essa senha só quando um vendedor precisar cancelar uma venda. Guarde-a com você.</p>
+    ${DB.cancelPassHash?`<label>Senha atual</label><input id="cpAtual" type="password" placeholder="••••••">`:''}
+    <label>Nova senha</label><input id="cpNova" type="password" placeholder="Mínimo 4 caracteres">
+    <label>Repita a nova senha</label><input id="cpNova2" type="password" placeholder="Digite igual">
+    <div style="height:16px"></div>
+    <button class="btn block" onclick="salvarSenhaCancelamento()">Salvar senha</button>
+  `);
+}
+async function salvarSenhaCancelamento(){
+  if(DB.cancelPassHash){
+    const atual = $('#cpAtual').value;
+    if(hash(atual) !== DB.cancelPassHash) return toast('Senha atual incorreta', true);
+  }
+  const n1 = $('#cpNova').value, n2 = $('#cpNova2').value;
+  if(n1.length < 4) return toast('A nova senha precisa ter pelo menos 4 caracteres', true);
+  if(n1 !== n2) return toast('As senhas não conferem', true);
+  DB.cancelPassHash = hash(n1);
+  await saveDB();
+  closeModal(); render();
+  toast('Senha de cancelamento salva 🔒');
 }
 function baixarBackup(){
   const pacote = {
@@ -1219,7 +1355,9 @@ function vendasDoPeriodo(){
   return { sales, label };
 }
 function viewRelatorios(){
-  const { sales } = vendasDoPeriodo();
+  const { sales: todas } = vendasDoPeriodo();
+  const sales = todas.filter(s=>!s.cancelled);
+  const canceladas = todas.filter(s=>s.cancelled);
   const tot = sales.reduce((a,s)=>a+s.total,0);
   const descTot = sales.reduce((a,s)=>a+(s.discount||0),0);
   const itens = sales.reduce((a,s)=>a+s.items.reduce((b,i)=>b+i.qty,0),0);
@@ -1264,7 +1402,18 @@ function viewRelatorios(){
         <div class="sb">${dstr(s.at)} • ${esc(s.sellerName)} • ${s.items.reduce((a,i)=>a+i.qty,0)} item(ns)${s.discount>0?' • <span style=\'color:var(--amber)\'>desc. '+fmt(s.discount)+'</span>':''}</div></div>
         <span class="muted">›</span>
       </div>`).join('')}
-  </div>`;
+  </div>
+  ${canceladas.length?`<div style="height:16px"></div>
+  <h3 style="font-size:17px; margin-bottom:8px">Vendas canceladas</h3>
+  <div class="card" style="padding:6px 16px">
+    ${canceladas.map(s=>`
+      <div class="listRow" style="cursor:pointer; opacity:.65" onclick="openSaleDetail('${s.id}')">
+        <span class="tag red">Cancelada</span>
+        <div class="inf"><div class="nm" style="text-decoration:line-through">${fmt(s.total)} • ${esc(s.payment)}</div>
+        <div class="sb">${dstr(s.at)} • ${esc(s.sellerName)}${s.cancelReason?' • '+esc(s.cancelReason):''}</div></div>
+        <span class="muted">›</span>
+      </div>`).join('')}
+  </div>`:''}`;
 }
 async function baixarRelatorioPDF(){
   const { sales, label } = vendasDoPeriodo();
@@ -1331,12 +1480,50 @@ function openSaleDetail(id){
   openModal(`
     <h3>Venda — ${fmt(s.total)}</h3>
     <p class="muted" style="font-size:13px">${dstr(s.at)} • Vendedor(a): ${esc(s.sellerName)} • ${esc(s.payment)}</p>
+    ${s.cancelled?`<div style="margin-top:8px"><span class="tag red">Cancelada em ${dstr(s.cancelledAt)}</span>${s.cancelReason?`<div class="muted" style="font-size:12.5px; margin-top:4px">Motivo: ${esc(s.cancelReason)}</div>`:''}</div>`:''}
     <div style="height:10px"></div>
     ${s.items.map(i=>`<div class="totRow"><span class="muted">${i.qty}× ${esc(i.name)}</span><span class="money">${fmt(i.price*i.qty)}</span></div>`).join('')}
     ${s.discount>0?`<div class="totRow"><span class="muted">Desconto</span><span class="money" style="color:var(--amber)">− ${fmt(s.discount)}</span></div>`:''}
     <div class="totRow big"><span>Total</span><span class="money" style="color:var(--lime)">${fmt(s.total)}</span></div>
     ${s.change>0?`<div class="totRow"><span class="muted">Recebido ${fmt(s.received)} • Troco</span><span class="money">${fmt(s.change)}</span></div>`:''}
+    ${!s.cancelled?`<div style="height:16px"></div><button class="btn danger block sm" onclick="pedirSenhaCancelamento('${s.id}')">↩ Cancelar venda / Devolução</button>`:''}
   `);
+}
+function pedirSenhaCancelamento(id){
+  if(!DB.cancelPassHash){
+    openModal(`
+      <h3>Configure a senha de cancelamento</h3>
+      <p class="muted" style="font-size:13.5px">Antes de cancelar vendas, defina uma senha só sua (protege contra cancelamentos indevidos por vendedores).</p>
+      <div style="height:16px"></div>
+      <button class="btn block" onclick="closeModal(); go('vendedores'); setTimeout(()=>toast('Defina a senha aqui embaixo, em Segurança'),300)">Ir configurar agora</button>
+    `);
+    return;
+  }
+  openModal(`
+    <h3>Confirmar cancelamento</h3>
+    <p class="muted" style="font-size:13.5px">Digite a senha de cancelamento para devolver os itens ao estoque.</p>
+    <label>Senha de cancelamento</label><input id="cvPass" type="password" placeholder="••••••">
+    <label>Motivo (opcional)</label><input id="cvMotivo" placeholder="Ex.: cliente devolveu o produto">
+    <div style="height:16px"></div>
+    <button class="btn danger block" onclick="confirmarCancelamento('${id}')">Confirmar cancelamento</button>
+  `);
+}
+async function confirmarCancelamento(id){
+  const pass = $('#cvPass').value;
+  if(hash(pass) !== DB.cancelPassHash) return toast('Senha de cancelamento incorreta', true);
+  const s = DB.sales.find(x=>x.id===id);
+  if(!s || s.cancelled) return closeModal();
+  s.cancelled = true; s.cancelledAt = Date.now(); s.cancelReason = $('#cvMotivo').value.trim();
+  s.items.forEach(it=>{
+    const p = DB.products.find(x=>x.id===it.pid);
+    if(p){
+      p.stock += it.qty;
+      DB.moves.unshift({ id:uid(), at:Date.now(), pid:p.id, name:p.name, type:'entrada', qty:it.qty, note:'Cancelamento/devolução de venda' });
+    }
+  });
+  await saveDB();
+  closeModal(); render();
+  toast('Venda cancelada e itens devolvidos ao estoque ↩');
 }
 
 /* =================== MODAL =================== */
