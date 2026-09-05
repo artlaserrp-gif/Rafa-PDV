@@ -11,15 +11,15 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="OFIR ERP">
-<meta name="theme-color" content="#0A0F1A">
+<meta name="theme-color" content="#0A0A0B">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --ink:#0A0F1A; --panel:#121A29; --panel2:#182236; --line:#243149;
-  --lime:#F0B94F; --lime-dk:#D99C2B; --cyan:#5E9BD8; --paper:#F4F6FA; --muted:#93A0B4;
-  --red:#F26D6D; --amber:#F2C14E;
+  --ink:#0A0A0B; --panel:#131315; --panel2:#1C1C1F; --line:#2A2A2E;
+  --lime:#ECECEE; --lime-dk:#CFCFD3; --cyan:#5EEAD4; --paper:#F2F2F4; --muted:#8B8B90;
+  --red:#F2726B; --amber:#F2C14E;
   --r:16px;
 }
 *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent}
@@ -42,11 +42,11 @@ label{display:block; font-size:12.5px; font-weight:700; color:var(--muted); marg
 .btn{
   display:inline-flex; align-items:center; justify-content:center; gap:8px;
   padding:12px 20px; border-radius:14px; font-weight:800; font-size:15px;
-  background:var(--lime); color:#1A1204; transition:transform .1s, filter .15s;
+  background:var(--lime); color:#141416; transition:transform .1s, filter .15s;
 }
 .btn:active{transform:scale(.97)}
 .btn:hover{filter:brightness(1.08)}
-.btn.cyan{background:var(--cyan); color:#0A1B2E}
+.btn.cyan{background:var(--cyan); color:#062F28}
 .btn.ghost{background:var(--panel2); color:var(--paper); border:1.5px solid var(--line)}
 .btn.danger{background:transparent; color:var(--red); border:1.5px solid var(--red)}
 .btn.sm{padding:8px 13px; font-size:13.5px; border-radius:11px}
@@ -54,8 +54,8 @@ label{display:block; font-size:12.5px; font-weight:700; color:var(--muted); marg
 .btn:disabled{opacity:.45; cursor:not-allowed}
 .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:18px}
 .tag{display:inline-block; padding:3px 10px; border-radius:99px; font-size:12px; font-weight:800}
-.tag.green{background:rgba(240,185,79,.15); color:var(--lime)}
-.tag.cyan{background:rgba(94,155,216,.15); color:var(--cyan)}
+.tag.green{background:rgba(94,234,212,.15); color:var(--cyan)}
+.tag.cyan{background:rgba(94,234,212,.15); color:var(--cyan)}
 .tag.red{background:rgba(242,109,109,.15); color:var(--red)}
 .tag.amber{background:rgba(242,193,78,.15); color:var(--amber)}
 .muted{color:var(--muted)}
@@ -63,15 +63,15 @@ label{display:block; font-size:12.5px; font-weight:700; color:var(--muted); marg
 
 /* ---------- AUTH ---------- */
 #authScreen{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
-  background:radial-gradient(1200px 600px at 80% -10%, rgba(94,155,216,.12), transparent 60%),
-             radial-gradient(1000px 700px at -10% 110%, rgba(240,185,79,.10), transparent 60%), var(--ink)}
+  background:radial-gradient(1200px 600px at 80% -10%, rgba(94,234,212,.08), transparent 60%),
+             radial-gradient(1000px 700px at -10% 110%, rgba(255,255,255,.05), transparent 60%), var(--ink)}
 .authBox{width:100%; max-width:400px}
 .authBox .logo{display:block; width:230px; margin:0 auto 8px; border-radius:20px}
 .authBox h1{font-size:24px; text-align:center; margin-bottom:2px}
 .authBox .sub{text-align:center; color:var(--muted); font-size:13.5px; margin-bottom:18px}
 .authTabs{display:flex; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:4px; margin-bottom:16px}
 .authTabs button{flex:1; padding:10px; border-radius:11px; font-weight:800; color:var(--muted)}
-.authTabs button.on{background:var(--lime); color:#1A1204}
+.authTabs button.on{background:var(--lime); color:#141416}
 
 /* ---------- SHELL ---------- */
 #app{display:none; min-height:100vh}
@@ -139,7 +139,7 @@ body.isAdmin .adminOnly{display:flex}
 .totRow.big{font-size:19px; font-weight:800; border-top:1.5px dashed var(--line); margin-top:6px; padding-top:10px}
 .payGrid{display:grid; grid-template-columns:1fr 1fr; gap:7px; margin:10px 0}
 .payBtn{padding:10px 6px; border-radius:12px; background:var(--panel2); border:1.5px solid var(--line); font-weight:800; font-size:13px; color:var(--muted)}
-.payBtn.on{border-color:var(--cyan); color:var(--cyan); background:rgba(94,155,216,.08)}
+.payBtn.on{border-color:var(--cyan); color:var(--cyan); background:rgba(94,234,212,.08)}
 
 /* ---------- LISTS / TABLE ---------- */
 .listRow{display:flex; align-items:center; gap:12px; padding:13px 4px; border-bottom:1px solid var(--line)}
@@ -165,7 +165,7 @@ body.isAdmin .adminOnly{display:flex}
 @media(min-width:720px){ #modalWrap{align-items:center} #modalBox{border-radius:22px} }
 #toast{
   position:fixed; left:50%; transform:translateX(-50%) translateY(20px); bottom:86px; z-index:80;
-  background:var(--lime); color:#1A1204; font-weight:800; padding:11px 20px; border-radius:99px;
+  background:var(--lime); color:#141416; font-weight:800; padding:11px 20px; border-radius:99px;
   opacity:0; pointer-events:none; transition:all .25s; font-size:14px; box-shadow:0 8px 30px rgba(0,0,0,.5);
   max-width:90vw; text-align:center;
 }
@@ -177,9 +177,9 @@ body.isAdmin .adminOnly{display:flex}
 
 /* mobile cart FAB */
 #cartFab{display:none; position:fixed; right:16px; bottom:calc(78px + env(safe-area-inset-bottom)); z-index:45;
-  background:var(--lime); color:#1A1204; border-radius:99px; padding:14px 20px; font-weight:900; font-size:15px;
-  box-shadow:0 10px 30px rgba(240,185,79,.35); align-items:center; gap:8px}
-#cartFab .ct{background:#0B1204; color:var(--lime); border-radius:99px; padding:1px 9px; font-size:13px}
+  background:var(--lime); color:#141416; border-radius:99px; padding:14px 20px; font-weight:900; font-size:15px;
+  box-shadow:0 10px 30px rgba(255,255,255,.15); align-items:center; gap:8px}
+#cartFab .ct{background:#141416; color:var(--lime); border-radius:99px; padding:1px 9px; font-size:13px}
 
 body.kiosk aside .navBtn[data-v]:not([data-v="pdv"]){display:none}
 body.kiosk aside .storeBadge{display:none}
@@ -1075,8 +1075,8 @@ async function baixarPedidoPDFCompleto(){
     ]),
     foot: [['','','','','','TOTAL', '', money(custoTotal)]],
     styles: { font:'helvetica', fontSize:8.5, cellPadding:2, textColor:[30,38,52] },
-    headStyles: { fillColor:[10,15,26], textColor:[240,185,79], fontStyle:'bold' },
-    footStyles: { fillColor:[242,244,248], textColor:[10,15,26], fontStyle:'bold' },
+    headStyles: { fillColor:[10,10,12], textColor:[94,234,212], fontStyle:'bold' },
+    footStyles: { fillColor:[242,244,248], textColor:[10,10,12], fontStyle:'bold' },
     alternateRowStyles: { fillColor:[247,249,252] },
     columnStyles: { 0:{ cellWidth:48 }, 3:{ halign:'center' }, 4:{ halign:'center' }, 5:{ halign:'center', fontStyle:'bold' }, 6:{ halign:'right' }, 7:{ halign:'right' } },
     didDrawPage: ()=>{
@@ -1111,7 +1111,7 @@ async function baixarPedidoPDFFornecedor(){
     head: [['Produto','Código','Quantidade','Valor un. (R$)','Total (R$)']],
     body: itens.map(i=>[ i.name, i.code || '-', String(i.qty), '', '' ]),
     styles: { font:'helvetica', fontSize:9.5, cellPadding:3.2, textColor:[30,38,52], minCellHeight:9 },
-    headStyles: { fillColor:[10,15,26], textColor:[240,185,79], fontStyle:'bold' },
+    headStyles: { fillColor:[10,10,12], textColor:[94,234,212], fontStyle:'bold' },
     alternateRowStyles: { fillColor:[247,249,252] },
     columnStyles: { 0:{ cellWidth:70 }, 2:{ halign:'center', fontStyle:'bold' }, 3:{ halign:'center' }, 4:{ halign:'center' } },
     didDrawPage: ()=>{
@@ -1443,7 +1443,7 @@ function enviarLogo(input){
     const S = 256;
     const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
     const cx = cv.getContext('2d');
-    cx.fillStyle = '#151917'; cx.fillRect(0,0,S,S);
+    cx.fillStyle = '#131315'; cx.fillRect(0,0,S,S);
     const r = Math.min(S/img.width, S/img.height);
     const w = img.width*r, h = img.height*r;
     cx.drawImage(img, (S-w)/2, (S-h)/2, w, h);
@@ -1624,8 +1624,8 @@ async function baixarRelatorioPDF(){
     ]),
     foot: [['', '', 'TOTAIS', money(ord.reduce((a,s)=>a+s.subtotal,0)), money(descTot), money(tot), '']],
     styles: { font:'helvetica', fontSize:8, cellPadding:2, textColor:[30,38,52] },
-    headStyles: { fillColor:[10,15,26], textColor:[240,185,79], fontStyle:'bold' },
-    footStyles: { fillColor:[242,244,248], textColor:[10,15,26], fontStyle:'bold' },
+    headStyles: { fillColor:[10,10,12], textColor:[94,234,212], fontStyle:'bold' },
+    footStyles: { fillColor:[242,244,248], textColor:[10,10,12], fontStyle:'bold' },
     alternateRowStyles: { fillColor:[247,249,252] },
     columnStyles: { 2:{ cellWidth:62 }, 3:{ halign:'right' }, 4:{ halign:'right' }, 5:{ halign:'right' } },
     didDrawPage: (d)=>{
