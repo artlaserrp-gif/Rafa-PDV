@@ -83,7 +83,7 @@ aside{
 aside .logo{width:100%; border-radius:16px; margin-bottom:14px}
 .navBtn{
   display:flex; align-items:center; gap:11px; padding:11px 13px; border-radius:12px;
-  font-weight:800; font-size:14.5px; color:var(--muted); width:100%; text-align:left;
+  font-weight:800; font-size:14.5px; color:var(--muted); width:100%; text-align:left; position:relative;
 }
 .navBtn svg{width:20px; height:20px; flex:none}
 .navBtn.on{background:var(--panel2); color:var(--lime)}
@@ -103,7 +103,12 @@ main{flex:1; padding:22px; max-width:1120px; margin:0 auto; width:100%; padding-
   padding:6px 8px calc(6px + env(safe-area-inset-bottom));
 }
 #bottomNav .row{display:flex}
-#bottomNav button{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:7px 2px; font-size:10.5px; font-weight:800; color:var(--muted); border-radius:10px}
+#bottomNav button{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:7px 2px; font-size:10.5px; font-weight:800; color:var(--muted); border-radius:10px; position:relative}
+.navBadge{position:absolute; top:2px; right:8px; min-width:16px; height:16px; padding:0 4px; border-radius:99px; background:var(--red); color:#fff; font-size:10px; font-weight:900; line-height:16px; text-align:center; display:none}
+aside .navBadge{top:8px; right:10px}
+.navBadge.show{display:block}
+.adminOnly{display:none}
+body.isAdmin .adminOnly{display:flex}
 #bottomNav button svg{width:22px; height:22px}
 #bottomNav button.on{color:var(--lime)}
 
@@ -176,7 +181,14 @@ main{flex:1; padding:22px; max-width:1120px; margin:0 auto; width:100%; padding-
   box-shadow:0 10px 30px rgba(240,185,79,.35); align-items:center; gap:8px}
 #cartFab .ct{background:#0B1204; color:var(--lime); border-radius:99px; padding:1px 9px; font-size:13px}
 
-@media(max-width:860px){
+body.kiosk aside .navBtn[data-v]:not([data-v="pdv"]){display:none}
+body.kiosk aside .storeBadge{display:none}
+body.kiosk aside .logoutBtn{display:none}
+body.kiosk #bottomNav button[data-v]:not([data-v="pdv"]){display:none}
+.kioskLock{display:none}
+body.kiosk .kioskLock{display:flex !important}
+.kioskBanner{display:none}
+body.kiosk .kioskBanner{display:flex}
   aside{display:none}
   #bottomNav{display:block}
   main{padding:16px 14px 110px}
@@ -245,9 +257,12 @@ main{flex:1; padding:22px; max-width:1120px; margin:0 auto; width:100%; padding-
       <button class="navBtn" data-v="caixa" onclick="go('caixa')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M2 12h20"/></svg>Caixa</button>
       <button class="navBtn" data-v="vendedores" onclick="go('vendedores')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M17 4a3.5 3.5 0 0 1 0 7M21.5 20c-.5-2.3-1.8-4-3.7-4.9"/></svg>Vendedores</button>
       <button class="navBtn" data-v="relatorios" onclick="go('relatorios')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Relatórios</button>
+      <button class="navBtn" data-v="fiado" onclick="go('fiado')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>Fiado<span id="navBadgeSide" class="navBadge"></span></button>
+      <button class="navBtn adminOnly" data-v="admin" onclick="go('admin')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 4.5-3.2 7.7-8 10-4.8-2.3-8-5.5-8-10V6l8-4z"/></svg>Admin</button>
       <div class="spacer"></div>
       <div class="storeBadge"><span class="muted">Loja</span><b id="sideStore"></b></div>
-      <button class="navBtn" onclick="logout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sair</button>
+      <button class="navBtn kioskLock" onclick="sairModoFuncionario()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Sair do modo</button>
+      <button class="navBtn logoutBtn" onclick="logout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sair</button>
     </aside>
     <main id="main"></main>
   </div>
@@ -258,6 +273,9 @@ main{flex:1; padding:22px; max-width:1120px; margin:0 auto; width:100%; padding-
     <button data-v="caixa" onclick="go('caixa')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M2 12h20"/></svg>Caixa</button>
     <button data-v="vendedores" onclick="go('vendedores')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M17 4a3.5 3.5 0 0 1 0 7M21.5 20c-.5-2.3-1.8-4-3.7-4.9"/></svg>Loja</button>
     <button data-v="relatorios" onclick="go('relatorios')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Vendas</button>
+    <button data-v="fiado" onclick="go('fiado')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>Fiado<span id="navBadgeBottom" class="navBadge"></span></button>
+    <button class="adminOnly" data-v="admin" onclick="go('admin')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 4.5-3.2 7.7-8 10-4.8-2.3-8-5.5-8-10V6l8-4z"/></svg>Admin</button>
+    <button class="kioskLock" onclick="sairModoFuncionario()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Destravar</button>
   </div></nav>
 
   <button id="cartFab" onclick="openCartModal()">🛒 Carrinho <span class="ct" id="fabCount">0</span></button>
@@ -298,6 +316,35 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 const CLIENT_ID = Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 let CHANNEL = null;
+const ADMIN_EMAIL = 'rafapresentesrp@gmail.com';
+let IS_ADMIN = false;
+let ADMIN_LOJAS = null;
+let adminSearch = '';
+let KIOSK = (function(){ try{ return localStorage.getItem('ofir_kiosk')==='1'; }catch(e){ return false; } })();
+function applyKiosk(){ document.body.classList.toggle('kiosk', KIOSK); }
+function ativarModoFuncionario(){
+  if(!DB.cancelPassHash){ toast('Configure a senha de gestor primeiro, no cartão Segurança acima', true); return; }
+  try{ localStorage.setItem('ofir_kiosk','1'); }catch(e){}
+  KIOSK = true; applyKiosk(); go('pdv');
+  toast('Modo funcionário ativado neste aparelho 🔒');
+}
+function sairModoFuncionario(){
+  openModal(`
+    <h3>Sair do modo funcionário</h3>
+    <p class="muted" style="font-size:13.5px">Digite a senha de gestor para liberar o menu completo neste aparelho.</p>
+    <label>Senha de gestor</label><input id="kmPass" type="password" placeholder="••••••">
+    <div style="height:16px"></div>
+    <button class="btn block" onclick="confirmarSaidaFuncionario()">Confirmar</button>
+  `);
+}
+function confirmarSaidaFuncionario(){
+  const p = $('#kmPass').value;
+  if(hash(p) !== DB.cancelPassHash) return toast('Senha incorreta', true);
+  try{ localStorage.removeItem('ofir_kiosk'); }catch(e){}
+  KIOSK = false; applyKiosk();
+  closeModal(); go('pdv');
+  toast('Modo funcionário desativado ✅');
+}
 let REG_PLANO = 'mensal';
 
 /* ===== LEITOR DE CODIGO DE BARRAS ===== */
@@ -500,10 +547,11 @@ let USER = null;         // lojista logado
 let DB = null;           // dados da loja logada
 let VIEW = 'pdv';
 let CART = [];           // {pid, qty}
-let PDV = { seller:'', pay:'Dinheiro', discount:0, received:'' };
+let PDV = { seller:'', pay:'Dinheiro', discount:0, received:'', clientId:'', dueDate:'' };
+let ADD_CLIENT_MODE = false;
 let prodSearch = '', pdvSearch = '';
 
-function blankDB(){ return { sellers:[], products:[], sales:[], moves:[], cancelPassHash:null, cash:{ open:false, openedAt:null, initial:0, entries:[], sessions:[] } }; }
+function blankDB(){ return { sellers:[], products:[], sales:[], moves:[], clients:[], cancelPassHash:null, cash:{ open:false, openedAt:null, initial:0, entries:[], sessions:[] } }; }
 async function saveDB(){
   if(!USER) return;
   DB._client = CLIENT_ID;
@@ -603,6 +651,7 @@ async function afterLogin(user){
     name: (user.user_metadata && user.user_metadata.owner_name) || '',
     plano: (user.user_metadata && user.user_metadata.plano) || ''
   };
+  IS_ADMIN = (user.email||'').toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const st = await checarAssinatura(user);
   if(!st.ok){ mostrarBloqueio(st); return; }
   if(st.fim && diasRestantes(st.fim.getTime()) <= 3){
@@ -656,7 +705,13 @@ async function logout(){
 function enterApp(){
   $('#authScreen').style.display='none'; $('#app').style.display='block';
   aplicarMarca();
+  applyKiosk();
+  document.body.classList.toggle('isAdmin', IS_ADMIN);
   go('pdv');
+  const { atrasados, totalPend } = fiadoResumo();
+  if(atrasados.length>0){
+    setTimeout(()=>toast('💰 '+atrasados.length+' fiado(s) atrasado(s) — confira a aba Fiado', true), 2600);
+  }
 }
 function aplicarMarca(){
   $('#sideStore').textContent = USER.store;
@@ -665,19 +720,24 @@ function aplicarMarca(){
 
 /* =================== NAV =================== */
 function go(v){
+  if(KIOSK) v = 'pdv';
   VIEW=v;
   document.querySelectorAll('[data-v]').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
   render();
   window.scrollTo(0,0);
 }
 function render(){
+  if(!DB.clients) DB.clients = [];
   const m = $('#main');
   if(VIEW==='pdv') m.innerHTML = viewPDV();
   else if(VIEW==='produtos') m.innerHTML = viewProdutos();
   else if(VIEW==='caixa') m.innerHTML = viewCaixa();
   else if(VIEW==='vendedores') m.innerHTML = viewVendedores();
   else if(VIEW==='relatorios') m.innerHTML = viewRelatorios();
+  else if(VIEW==='fiado') m.innerHTML = viewFiado();
+  else if(VIEW==='admin') m.innerHTML = viewAdmin();
   updateFab();
+  updateFiadoBadge();
 }
 
 /* =================== PDV =================== */
@@ -748,8 +808,27 @@ function cartHTML(){
     </div>
     <label>Forma de pagamento</label>
     <div class="payGrid">
-      ${['Dinheiro','Pix','Débito','Crédito'].map(f=>`<button class="payBtn ${PDV.pay===f?'on':''}" onclick="PDV.pay='${f}'; refreshCart()">${f}</button>`).join('')}
+      ${['Dinheiro','Pix','Débito','Crédito','Fiado'].map(f=>`<button class="payBtn ${PDV.pay===f?'on':''}" onclick="selecionarPagamento('${f}')">${f}</button>`).join('')}
     </div>
+    ${PDV.pay==='Fiado'?`
+    <label>Cliente</label>
+    <div style="display:flex; gap:8px">
+      <select onchange="PDV.clientId=this.value" style="flex:1">
+        <option value="">Selecione…</option>
+        ${DB.clients.map(c=>`<option value="${c.id}" ${PDV.clientId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
+      </select>
+      <button class="btn sm cyan" style="flex:none" onclick="ADD_CLIENT_MODE=!ADD_CLIENT_MODE; refreshCart()">+ Novo</button>
+    </div>
+    ${ADD_CLIENT_MODE?`
+    <div style="margin-top:8px; padding:10px; background:var(--panel2); border-radius:12px">
+      <label style="margin-top:0">Nome do cliente</label><input id="ncNome" placeholder="Nome completo">
+      <label>WhatsApp (opcional, para cobrar depois)</label><input id="ncFone" inputmode="numeric" placeholder="DDD + número">
+      <div style="height:8px"></div>
+      <button class="btn sm block" onclick="salvarNovoClienteRapido()">Salvar cliente</button>
+    </div>`:''}
+    <label>Prazo para pagamento</label>
+    <input type="date" value="${PDV.dueDate}" onchange="PDV.dueDate=this.value">
+    `:''}
     <label>Desconto (R$)</label>
     <input type="number" min="0" step="0.01" value="${PDV.discount||''}" placeholder="0,00" oninput="PDV.discount=this.value; refreshCartTotals()">
     ${PDV.pay==='Dinheiro'?`<label>Valor recebido (R$)</label>
@@ -769,6 +848,26 @@ function cartTotalsHTML(){
     <div class="totRow big"><span>Total</span><span class="money" style="color:var(--lime)">${fmt(t.total)}</span></div>
     ${troco!==null?`<div class="totRow"><span class="muted">Troco</span><span class="money" style="color:${troco<0?'var(--red)':'var(--cyan)'}">${fmt(troco)}</span></div>`:''}
   `;
+}
+function selecionarPagamento(f){
+  PDV.pay = f;
+  if(f==='Fiado' && !PDV.dueDate){
+    const d = new Date(); d.setDate(d.getDate()+7);
+    PDV.dueDate = d.toISOString().slice(0,10);
+  }
+  refreshCart();
+}
+async function salvarNovoClienteRapido(){
+  const nome = $('#ncNome').value.trim();
+  const fone = $('#ncFone').value.replace(/\D/g,'');
+  if(!nome) return toast('Informe o nome do cliente', true);
+  const c = { id: uid(), name: nome, phone: fone };
+  DB.clients.push(c);
+  await saveDB();
+  PDV.clientId = c.id;
+  ADD_CLIENT_MODE = false;
+  refreshCart();
+  toast('Cliente cadastrado');
 }
 function refreshCart(){
   const p = $('#cartPanel'); if(p) p.innerHTML = cartHTML();
@@ -815,6 +914,8 @@ async function finishSale(){
   if(CART.length===0) return;
   const t = cartTotal();
   if(PDV.pay==='Dinheiro' && num(PDV.received)>0 && num(PDV.received)<t.total) return toast('Valor recebido é menor que o total', true);
+  if(PDV.pay==='Fiado' && !PDV.clientId) return toast('Selecione o cliente do fiado', true);
+  if(PDV.pay==='Fiado' && !PDV.dueDate) return toast('Informe o prazo para pagamento', true);
   const items = CART.map(c=>{ const p=DB.products.find(x=>x.id===c.pid); return {pid:p.id, name:p.name, price:p.price, qty:c.qty}; });
   // baixa no estoque + movimentação
   for(const it of items){
@@ -823,18 +924,25 @@ async function finishSale(){
     DB.moves.unshift({ id:uid(), at:Date.now(), pid:p.id, name:p.name, type:'saida', qty:it.qty, note:'Venda' });
   }
   const seller = DB.sellers.find(s=>s.id===PDV.seller);
+  const cliente = PDV.pay==='Fiado' ? DB.clients.find(c=>c.id===PDV.clientId) : null;
   const sale = {
     id:uid(), at:Date.now(), sellerId:PDV.seller, sellerName:seller?seller.name:'—',
     items, subtotal:t.sub, discount:t.disc, total:t.total, payment:PDV.pay,
     received: PDV.pay==='Dinheiro'?num(PDV.received)||t.total:t.total,
     change: PDV.pay==='Dinheiro'&&num(PDV.received)>0?num(PDV.received)-t.total:0
   };
+  if(PDV.pay==='Fiado'){
+    sale.clientId = PDV.clientId;
+    sale.clientName = cliente ? cliente.name : '—';
+    sale.dueDate = PDV.dueDate;
+    sale.fiadoPago = false;
+  }
   DB.sales.unshift(sale);
   await saveDB();
   const troco = sale.change;
-  CART=[]; PDV.discount=0; PDV.received='';
+  CART=[]; PDV.discount=0; PDV.received=''; PDV.clientId=''; PDV.dueDate=''; ADD_CLIENT_MODE=false;
   closeModal(); render();
-  toast('Venda concluída! '+fmt(sale.total)+(troco>0?' • Troco: '+fmt(troco):''));
+  toast(PDV.pay==='Fiado' ? 'Fiado registrado para '+sale.clientName+' • '+fmt(sale.total) : 'Venda concluída! '+fmt(sale.total)+(troco>0?' • Troco: '+fmt(troco):''));
 }
 
 /* =================== PRODUTOS =================== */
@@ -897,13 +1005,20 @@ function abrirEditorPedido(){
 }
 function pedidoEditorHTML(){
   const money = v => fmt(v||0);
-  const incluidos = PEDIDO_ITEMS.filter(i=>i.incluir);
-  const total = incluidos.reduce((a,i)=>a+i.qty*i.cost,0);
   return `
     <h3>Pedido de compra</h3>
     <p class="muted" style="font-size:13px; margin-bottom:8px">Ajuste as quantidades antes de gerar o PDF. Desmarque o que não quiser incluir.</p>
-    <div style="display:flex; flex-direction:column; gap:8px; max-height:340px; overflow:auto">
-      ${PEDIDO_ITEMS.map((it,idx)=>`
+    <div id="pedidoLista" style="display:flex; flex-direction:column; gap:8px; max-height:340px; overflow:auto">${pedidoItensHTML()}</div>
+    <div id="pedidoTotal" class="totRow big" style="margin-top:10px">${pedidoTotalHTML(money)}</div>
+    <div style="height:12px"></div>
+    <button class="btn block" onclick="baixarPedidoPDFCompleto()">📄 PDF completo (uso interno, com valores)</button>
+    <div style="height:8px"></div>
+    <button class="btn cyan block" onclick="baixarPedidoPDFFornecedor()">📤 PDF para o fornecedor (sem valores)</button>
+    <p class="muted" style="font-size:11.5px; text-align:center; margin-top:8px">O PDF do fornecedor mostra só produto e quantidade, com espaço para anotar o valor quando a mercadoria chegar.</p>
+  `;
+}
+function pedidoItensHTML(){
+  return PEDIDO_ITEMS.map((it,idx)=>`
         <div class="cartItem" style="opacity:${it.incluir?'1':'.45'}">
           <input type="checkbox" ${it.incluir?'checked':''} onchange="PEDIDO_ITEMS[${idx}].incluir=this.checked; atualizarPedidoEditor()" style="width:18px; height:18px; flex:none">
           <div class="inf">
@@ -917,19 +1032,19 @@ function pedidoEditorHTML(){
               onchange="PEDIDO_ITEMS[${idx}].qty=Math.max(1,Math.round(num(this.value))||1); atualizarPedidoEditor()">
             <button onclick="PEDIDO_ITEMS[${idx}].qty++; atualizarPedidoEditor()">+</button>
           </div>
-        </div>`).join('')}
-    </div>
-    <div id="pedidoTotal" class="totRow big" style="margin-top:10px"><span>Estimativa (${incluidos.length} item${incluidos.length===1?'':'s'})</span><span class="money" style="color:var(--lime)">${money(total)}</span></div>
-    <div style="height:12px"></div>
-    <button class="btn block" onclick="baixarPedidoPDFCompleto()">📄 PDF completo (uso interno, com valores)</button>
-    <div style="height:8px"></div>
-    <button class="btn cyan block" onclick="baixarPedidoPDFFornecedor()">📤 PDF para o fornecedor (sem valores)</button>
-    <p class="muted" style="font-size:11.5px; text-align:center; margin-top:8px">O PDF do fornecedor mostra só produto e quantidade, com espaço para anotar o valor quando a mercadoria chegar.</p>
-  `;
+        </div>`).join('');
+}
+function pedidoTotalHTML(money){
+  money = money || (v => fmt(v||0));
+  const incluidos = PEDIDO_ITEMS.filter(i=>i.incluir);
+  const total = incluidos.reduce((a,i)=>a+i.qty*i.cost,0);
+  return `<span>Estimativa (${incluidos.length} item${incluidos.length===1?'':'s'})</span><span class="money" style="color:var(--lime)">${money(total)}</span>`;
 }
 function atualizarPedidoEditor(){
-  const box = $('#modalBox');
-  if(box) box.innerHTML = pedidoEditorHTML();
+  const lista = document.getElementById('pedidoLista');
+  const totalEl = document.getElementById('pedidoTotal');
+  if(lista) lista.innerHTML = pedidoItensHTML();
+  if(totalEl) totalEl.innerHTML = pedidoTotalHTML();
 }
 async function baixarPedidoPDFCompleto(){
   const itens = PEDIDO_ITEMS.filter(i=>i.incluir && i.qty>0);
@@ -1243,6 +1358,14 @@ function viewVendedores(){
       <div class="sb muted" style="font-size:12.5px">${DB.cancelPassHash?'Configurada — exigida para cancelar qualquer venda.':'Ainda não configurada. Defina para poder cancelar vendas com segurança.'}</div>
     </div>
     <button class="btn sm cyan" onclick="openCancelPassForm()">${DB.cancelPassHash?'🔒 Trocar senha':'🔒 Definir senha'}</button>
+  </div>
+  <div style="height:16px"></div>
+  <div class="card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+    <div style="flex:1; min-width:180px">
+      <div class="nm" style="font-weight:800">👥 Modo funcionário (neste aparelho)</div>
+      <div class="sb muted" style="font-size:12.5px">Trava este aparelho só na tela de Vender — sem acesso a Produtos, Caixa, Vendedores ou Relatórios. Peça a senha de gestor para destravar.</div>
+    </div>
+    <button class="btn sm" onclick="ativarModoFuncionario()">Ativar neste aparelho</button>
   </div>
   <div style="height:16px"></div>
   <div class="card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
@@ -1563,6 +1686,214 @@ async function confirmarCancelamento(id){
   await saveDB();
   closeModal(); render();
   toast('Venda cancelada e itens devolvidos ao estoque ↩');
+}
+
+/* =================== FIADO =================== */
+function fiadoResumo(){
+  const hojeStr = new Date().toISOString().slice(0,10);
+  const pend = DB.sales.filter(s=>s.payment==='Fiado' && !s.fiadoPago && !s.cancelled);
+  const atrasados = pend.filter(s=>s.dueDate && s.dueDate<hojeStr);
+  const hoje = pend.filter(s=>s.dueDate===hojeStr);
+  const totalPend = pend.reduce((a,s)=>a+s.total,0);
+  return { pend, atrasados, hoje, totalPend, hojeStr };
+}
+function updateFiadoBadge(){
+  if(!DB || !DB.sales){ return; }
+  const { atrasados, hoje } = fiadoResumo();
+  const n = atrasados.length + hoje.length;
+  ['navBadgeSide','navBadgeBottom'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(n>0){ el.textContent = n>9?'9+':String(n); el.classList.add('show'); }
+    else el.classList.remove('show');
+  });
+}
+function diasEntre(dueDate, hojeStr){
+  const a = new Date(dueDate+'T00:00:00'), b = new Date(hojeStr+'T00:00:00');
+  return Math.round((b-a)/864e5);
+}
+function viewFiado(){
+  const { pend, atrasados, hoje, totalPend, hojeStr } = fiadoResumo();
+  const ordenados = pend.slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+  return `
+  <div class="pageHead"><div><h2>Fiado</h2><div class="sub">Controle de vendas a prazo e cobrança</div></div>
+    <button class="btn sm" onclick="openClientForm()">+ Cliente</button></div>
+  ${(atrasados.length>0)?`<div class="card" style="margin-bottom:14px; border-color:rgba(242,109,109,.5)">
+    <div class="nm" style="font-weight:800; color:var(--red)">⚠️ ${atrasados.length} cobrança${atrasados.length===1?'':'s'} atrasada${atrasados.length===1?'':'s'}</div>
+    <div class="sb muted" style="font-size:12.5px">Totalizando ${fmt(atrasados.reduce((a,s)=>a+s.total,0))}. Vale cobrar hoje.</div>
+  </div>`:''}
+  <div class="statGrid">
+    <div class="stat lime"><div class="lb">A receber</div><div class="vl">${fmt(totalPend)}</div></div>
+    <div class="stat red"><div class="lb">Atrasados</div><div class="vl">${atrasados.length}</div></div>
+    <div class="stat"><div class="lb">Vencem hoje</div><div class="vl">${hoje.length}</div></div>
+    <div class="stat cyan"><div class="lb">Clientes com fiado</div><div class="vl">${new Set(pend.map(s=>s.clientId)).size}</div></div>
+  </div>
+  <h3 style="font-size:17px; margin-bottom:8px">Pendências</h3>
+  <div class="card" style="padding:6px 16px; margin-bottom:16px">
+    ${ordenados.length===0?`<div class="empty"><div class="big">🤝</div>Nenhum fiado pendente no momento</div>`:
+      ordenados.map(s=>{
+        const dias = diasEntre(s.dueDate, hojeStr);
+        const status = dias>0 ? `<span class="tag red">${dias} dia${dias===1?'':'s'} atrasado</span>` : dias===0 ? `<span class="tag amber">Vence hoje</span>` : `<span class="tag cyan">Vence em ${-dias} dia${-dias===1?'':'s'}</span>`;
+        const cliente = DB.clients.find(c=>c.id===s.clientId);
+        return `<div class="listRow">
+          <div class="inf">
+            <div class="nm">${esc(s.clientName||'Cliente')} ${status}</div>
+            <div class="sb">${dstr(s.at)} • vence ${s.dueDate?new Date(s.dueDate+'T12:00:00').toLocaleDateString('pt-BR'):'-'} • ${fmt(s.total)}</div>
+          </div>
+          <button class="btn sm cyan" onclick="cobrarWhatsApp('${s.id}')">💬 Cobrar</button>
+          <button class="btn sm" onclick="marcarFiadoPago('${s.id}')">✅ Pago</button>
+        </div>`;
+      }).join('')}
+  </div>
+  <h3 style="font-size:17px; margin-bottom:8px">Clientes cadastrados</h3>
+  <div class="card" style="padding:6px 16px">
+    ${DB.clients.length===0?`<div class="empty">Nenhum cliente cadastrado ainda</div>`:
+      DB.clients.map(c=>{
+        const deve = pend.filter(s=>s.clientId===c.id).reduce((a,s)=>a+s.total,0);
+        return `<div class="listRow">
+          <div class="inf"><div class="nm">${esc(c.name)}</div><div class="sb">${c.phone?esc(c.phone):'sem WhatsApp cadastrado'}${deve>0?' • deve '+fmt(deve):''}</div></div>
+          <button class="btn sm ghost" onclick="openClientForm('${c.id}')">Editar</button>
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+function openClientForm(id){
+  const c = id ? DB.clients.find(x=>x.id===id) : null;
+  openModal(`
+    <h3>${c?'Editar cliente':'Novo cliente'}</h3>
+    <label>Nome</label><input id="clName" value="${c?esc(c.name):''}" placeholder="Nome completo">
+    <label>WhatsApp</label><input id="clFone" value="${c?esc(c.phone||''):''}" inputmode="numeric" placeholder="DDD + número">
+    <div style="height:16px"></div>
+    <button class="btn block" onclick="saveClient('${id||''}')">Salvar</button>
+    ${c?`<div style="height:8px"></div><button class="btn danger block sm" onclick="delClient('${c.id}')">Excluir cliente</button>`:''}
+  `);
+}
+async function saveClient(id){
+  const name = $('#clName').value.trim();
+  const phone = $('#clFone').value.replace(/\D/g,'');
+  if(!name) return toast('Informe o nome do cliente', true);
+  if(id){ const c=DB.clients.find(x=>x.id===id); c.name=name; c.phone=phone; }
+  else DB.clients.push({ id: uid(), name, phone });
+  await saveDB(); closeModal(); render(); toast('Cliente salvo');
+}
+async function delClient(id){
+  const deve = DB.sales.some(s=>s.clientId===id && s.payment==='Fiado' && !s.fiadoPago && !s.cancelled);
+  if(deve) return toast('Este cliente ainda tem fiado pendente — quite antes de excluir', true);
+  if(!confirm('Excluir este cliente?')) return;
+  DB.clients = DB.clients.filter(c=>c.id!==id);
+  await saveDB(); closeModal(); render(); toast('Cliente excluído');
+}
+async function marcarFiadoPago(saleId){
+  const s = DB.sales.find(x=>x.id===saleId); if(!s) return;
+  if(!confirm('Confirmar recebimento de '+fmt(s.total)+' de '+(s.clientName||'cliente')+'?')) return;
+  s.fiadoPago = true; s.fiadoPagoAt = Date.now();
+  await saveDB(); render();
+  toast('Fiado quitado ✅');
+}
+function cobrarWhatsApp(saleId){
+  const s = DB.sales.find(x=>x.id===saleId); if(!s) return;
+  const c = DB.clients.find(x=>x.id===s.clientId);
+  const fone = c && c.phone;
+  if(!fone) return toast('Este cliente não tem WhatsApp cadastrado', true);
+  const venc = s.dueDate ? new Date(s.dueDate+'T12:00:00').toLocaleDateString('pt-BR') : '';
+  const msg = `Olá ${c.name}! Passando para lembrar do fiado de ${fmt(s.total)} na ${USER.store}${venc?' (venceu em '+venc+')':''}. Pode combinarmos o pagamento?`;
+  window.open('https://wa.me/55'+fone.replace(/\D/g,'')+'?text='+encodeURIComponent(msg), '_blank');
+}
+
+/* =================== ADMIN (painel da dona do OFIR ERP) =================== */
+async function carregarAdmin(){
+  const { data: lojas, error: e1 } = await sb.from('lojas').select('user_id,store_name,cpf_cnpj,phone,plano,updated_at,created_at');
+  const { data: assinaturas, error: e2 } = await sb.from('assinaturas').select('user_id,email,paid_until,note');
+  if(e1 || e2){
+    ADMIN_LOJAS = [];
+    toast('Não consegui carregar as lojas — confira se a permissão de admin foi configurada no Supabase', true);
+    if(VIEW==='admin') render();
+    return;
+  }
+  const assMap = {};
+  (assinaturas||[]).forEach(a=>{ assMap[a.user_id] = a; });
+  ADMIN_LOJAS = (lojas||[]).map(l=>({
+    userId: l.user_id, store: l.store_name||'—', cpf: l.cpf_cnpj||'', phone: l.phone||'',
+    plano: l.plano||'', paidUntil: assMap[l.user_id]?assMap[l.user_id].paid_until:'',
+    email: assMap[l.user_id]?assMap[l.user_id].email:'', createdAt: l.created_at||null
+  })).sort((a,b)=>a.store.localeCompare(b.store));
+  if(VIEW==='admin') render();
+}
+function adminStatus(l){
+  const hoje = new Date().toISOString().slice(0,10);
+  if(l.paidUntil){
+    if(l.paidUntil < hoje) return { label:'Vencida em '+new Date(l.paidUntil+'T12:00:00').toLocaleDateString('pt-BR'), cls:'red', grupo:'vencido' };
+    return { label:'Ativa até '+new Date(l.paidUntil+'T12:00:00').toLocaleDateString('pt-BR'), cls:'green', grupo:'ativo' };
+  }
+  if(l.createdAt){
+    const fimTeste = new Date(new Date(l.createdAt).getTime() + 7*864e5);
+    if(fimTeste >= new Date()) return { label:'Em teste até '+fimTeste.toLocaleDateString('pt-BR'), cls:'cyan', grupo:'teste' };
+    return { label:'Teste encerrado, não assinou', cls:'amber', grupo:'naoConverteu' };
+  }
+  return { label:'Sem assinatura registrada', cls:'amber', grupo:'naoConverteu' };
+}
+let adminFiltro = 'todos';
+function viewAdmin(){
+  if(ADMIN_LOJAS === null){ carregarAdmin(); return '<div class="empty">Carregando lojas…</div>'; }
+  const termo = adminSearch.toLowerCase();
+  const comStatus = ADMIN_LOJAS.map(l=>({ l, st: adminStatus(l) }));
+  const contagem = { teste:0, naoConverteu:0, ativo:0, vencido:0 };
+  comStatus.forEach(x=>contagem[x.st.grupo]++);
+  let filtrados = comStatus;
+  if(adminFiltro!=='todos') filtrados = filtrados.filter(x=>x.st.grupo===adminFiltro);
+  if(termo) filtrados = filtrados.filter(x=>(x.l.store+' '+x.l.cpf+' '+x.l.phone).toLowerCase().includes(termo));
+  return `
+  <div class="pageHead"><div><h2>Admin • Lojas</h2><div class="sub">${ADMIN_LOJAS.length} loja(s) cadastradas no OFIR ERP</div></div>
+    <button class="btn sm ghost" onclick="ADMIN_LOJAS=null; render()">🔄 Atualizar</button></div>
+  <div class="statGrid">
+    <div class="stat cyan" style="cursor:pointer" onclick="adminFiltro='teste'; render()"><div class="lb">Em teste</div><div class="vl">${contagem.teste}</div></div>
+    <div class="stat" style="cursor:pointer; border-color:rgba(242,193,78,.5)" onclick="adminFiltro='naoConverteu'; render()"><div class="lb" style="color:var(--amber)">Não converteram</div><div class="vl" style="color:var(--amber)">${contagem.naoConverteu}</div></div>
+    <div class="stat lime" style="cursor:pointer" onclick="adminFiltro='ativo'; render()"><div class="lb">Ativos</div><div class="vl">${contagem.ativo}</div></div>
+    <div class="stat red" style="cursor:pointer" onclick="adminFiltro='vencido'; render()"><div class="lb">Vencidos</div><div class="vl">${contagem.vencido}</div></div>
+  </div>
+  ${adminFiltro!=='todos'?`<div style="margin-bottom:10px"><button class="payBtn on" onclick="adminFiltro='todos'; render()">✕ Limpar filtro</button></div>`:''}
+  <div class="searchBar" style="margin-bottom:12px"><input placeholder="Buscar loja, CNPJ ou telefone…" value="${esc(adminSearch)}" oninput="adminSearch=this.value; refreshAdminList()"></div>
+  <div class="card" id="adminLista" style="padding:6px 16px">${adminRowsHTML(filtrados)}</div>
+  `;
+}
+function adminRowsHTML(itens){
+  if(itens.length===0) return `<div class="empty">Nenhuma loja encontrada</div>`;
+  return itens.map(({l,st})=>{
+    const foneMsg = st.grupo==='naoConverteu'
+      ? `Olá! Aqui é do OFIR ERP. Vi que seu período de teste terminou e você não deu continuidade — posso saber o que achou do sistema? Seu feedback me ajuda muito!`
+      : `Olá! Aqui é do OFIR ERP, passando para falar sobre sua assinatura.`;
+    return `<div class="listRow" style="flex-wrap:wrap">
+      <div class="inf" style="min-width:160px">
+        <div class="nm">${esc(l.store)} <span class="tag ${st.cls}">${st.label}</span></div>
+        <div class="sb">${l.plano?esc(l.plano)+' • ':''}${l.cpf?esc(l.cpf)+' • ':''}${l.phone?esc(l.phone):'sem telefone'}${l.createdAt?' • cadastrou em '+new Date(l.createdAt).toLocaleDateString('pt-BR'):''}</div>
+      </div>
+      <input type="date" id="adm-${l.userId}" value="${l.paidUntil||''}" style="width:150px">
+      <button class="btn sm" onclick="salvarAssinaturaAdmin('${l.userId}')">Salvar</button>
+      ${l.phone?`<button class="btn sm cyan" onclick="window.open('https://wa.me/55${l.phone.replace(/\D/g,'')}?text=${encodeURIComponent(foneMsg)}','_blank')">💬</button>`:''}
+    </div>`;
+  }).join('');
+}
+function refreshAdminList(){
+  const el = document.getElementById('adminLista');
+  if(!el || ADMIN_LOJAS===null) return;
+  const termo = adminSearch.toLowerCase();
+  let itens = ADMIN_LOJAS.map(l=>({ l, st: adminStatus(l) }));
+  if(adminFiltro!=='todos') itens = itens.filter(x=>x.st.grupo===adminFiltro);
+  if(termo) itens = itens.filter(x=>(x.l.store+' '+x.l.cpf+' '+x.l.phone).toLowerCase().includes(termo));
+  el.innerHTML = adminRowsHTML(itens);
+}
+async function salvarAssinaturaAdmin(userId){
+  const input = document.getElementById('adm-'+userId);
+  const data = input ? input.value : '';
+  if(!data) return toast('Escolha uma data', true);
+  const loja = ADMIN_LOJAS.find(l=>l.userId===userId);
+  const { error } = await sb.from('assinaturas').upsert({
+    user_id: userId, email: loja?loja.email:null, paid_until: data
+  }, { onConflict:'user_id' });
+  if(error) return toast('Erro ao salvar: '+error.message, true);
+  if(loja) loja.paidUntil = data;
+  refreshAdminList();
+  toast('Assinatura atualizada ✅');
 }
 
 /* =================== MODAL =================== */
