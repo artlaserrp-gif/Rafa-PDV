@@ -107,8 +107,8 @@ main{flex:1; padding:22px; max-width:1120px; margin:0 auto; width:100%; padding-
 .navBadge{position:absolute; top:2px; right:8px; min-width:16px; height:16px; padding:0 4px; border-radius:99px; background:var(--red); color:#fff; font-size:10px; font-weight:900; line-height:16px; text-align:center; display:none}
 aside .navBadge{top:8px; right:10px}
 .navBadge.show{display:block}
-.adminOnly{display:none}
-body.isAdmin .adminOnly{display:flex}
+.adminOnly{display:none !important}
+body.isAdmin .adminOnly{display:flex !important}
 #bottomNav button svg{width:22px; height:22px}
 #bottomNav button.on{color:var(--lime)}
 
@@ -185,7 +185,7 @@ body.kiosk aside .navBtn[data-v]:not([data-v="pdv"]){display:none}
 body.kiosk aside .storeBadge{display:none}
 body.kiosk aside .logoutBtn{display:none}
 body.kiosk #bottomNav button[data-v]:not([data-v="pdv"]){display:none}
-.kioskLock{display:none}
+.kioskLock{display:none !important}
 body.kiosk .kioskLock{display:flex !important}
 .kioskBanner{display:none}
 body.kiosk .kioskBanner{display:flex}
@@ -256,7 +256,7 @@ body.kiosk .kioskBanner{display:flex}
       <button class="navBtn" data-v="pdv" onclick="go('pdv')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 3h2l2.6 12.5a1.5 1.5 0 0 0 1.5 1.2h7.9a1.5 1.5 0 0 0 1.4-1l2.3-8.2H6"/></svg>Vender</button>
       <button class="navBtn" data-v="produtos" onclick="go('produtos')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3.3 8.2L12 13l8.7-4.8M12 13v9"/></svg>Produtos</button>
       <button class="navBtn" data-v="caixa" onclick="go('caixa')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M2 12h20"/></svg>Caixa</button>
-      <button class="navBtn" data-v="vendedores" onclick="go('vendedores')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M17 4a3.5 3.5 0 0 1 0 7M21.5 20c-.5-2.3-1.8-4-3.7-4.9"/></svg>Vendedores</button>
+      <button class="navBtn" data-v="vendedores" onclick="go('vendedores')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M17 4a3.5 3.5 0 0 1 0 7M21.5 20c-.5-2.3-1.8-4-3.7-4.9"/></svg>Loja</button>
       <button class="navBtn" data-v="relatorios" onclick="go('relatorios')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Relatórios</button>
       <button class="navBtn" data-v="fiado" onclick="go('fiado')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>Fiado<span id="navBadgeSide" class="navBadge"></span></button>
       <button class="navBtn adminOnly" data-v="admin" onclick="go('admin')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 4.5-3.2 7.7-8 10-4.8-2.3-8-5.5-8-10V6l8-4z"/></svg>Admin</button>
@@ -556,17 +556,59 @@ function blankDB(){ return { sellers:[], products:[], sales:[], moves:[], client
 async function saveDB(){
   if(!USER) return;
   DB._client = CLIENT_ID;
-  let q = sb.from('lojas')
-    .update({ data: DB, updated_at: new Date().toISOString() })
-    .eq('user_id', USER.id);
-  if(LAST_SYNC) q = q.eq('updated_at', LAST_SYNC);
-  const { data: rows, error } = await q.select('updated_at');
-  if(error){ toast('Sem conexão — a última alteração não foi salva na nuvem', true); return; }
-  if(!rows || rows.length === 0){
-    await recarregarDoServidor(true);
-    return;
+  for(let tentativa=0; tentativa<3; tentativa++){
+    let q = sb.from('lojas')
+      .update({ data: DB, updated_at: new Date().toISOString() })
+      .eq('user_id', USER.id);
+    if(LAST_SYNC) q = q.eq('updated_at', LAST_SYNC);
+    const { data: rows, error } = await q.select('updated_at');
+    if(error){ toast('Sem conexão — a última alteração não foi salva na nuvem', true); return; }
+    if(rows && rows.length > 0){ LAST_SYNC = rows[0].updated_at; return; }
+    // Conflito: outro aparelho salvou primeiro. Mescla em vez de descartar, e tenta salvar de novo.
+    const ok = await mesclarComServidor();
+    if(!ok) return;
   }
-  LAST_SYNC = rows[0].updated_at;
+  toast('⚠️ Muita gente mexendo ao mesmo tempo — confira se sua última ação foi salva', true);
+}
+function uniaoPorId(locais, doServidor){
+  locais = locais||[]; doServidor = doServidor||[];
+  const idsServidor = new Set(doServidor.map(x=>x.id));
+  const extrasLocais = locais.filter(x=>!idsServidor.has(x.id));
+  return { unidos: [...doServidor, ...extrasLocais], extrasLocais };
+}
+async function mesclarComServidor(){
+  try{
+    const { data: row } = await sb.from('lojas').select('data,updated_at,store_name').eq('user_id', USER.id).maybeSingle();
+    if(!row || !row.data) return false;
+    const servidor = row.data;
+    const local = DB;
+
+    const salesM = uniaoPorId(local.sales, servidor.sales);
+    servidor.sales = salesM.unidos.sort((a,b)=>b.at-a.at);
+    // Vendas que só existiam localmente: garante que a baixa de estoque delas seja aplicada aos produtos do servidor
+    servidor.products = servidor.products || [];
+    salesM.extrasLocais.forEach(s=>{
+      if(s.cancelled) return;
+      (s.items||[]).forEach(it=>{
+        const p = servidor.products.find(x=>x.id===it.pid);
+        if(p) p.stock -= it.qty;
+      });
+    });
+
+    servidor.moves = uniaoPorId(local.moves, servidor.moves).unidos.sort((a,b)=>b.at-a.at);
+    servidor.clients = uniaoPorId(local.clients, servidor.clients).unidos;
+    servidor.sellers = uniaoPorId(local.sellers, servidor.sellers).unidos;
+    servidor.logo = local.logo || servidor.logo;
+    servidor.cancelPassHash = servidor.cancelPassHash || local.cancelPassHash;
+
+    DB = servidor;
+    DB._client = CLIENT_ID;
+    LAST_SYNC = row.updated_at;
+    if(row.store_name) USER.store = row.store_name;
+    aplicarMarca(); render();
+    if(salesM.extrasLocais.length>0) toast('🔄 Sincronizado — nenhuma venda foi perdida');
+    return true;
+  }catch(e){ return false; }
 }
 async function recarregarDoServidor(avisar){
   try{
@@ -575,7 +617,7 @@ async function recarregarDoServidor(avisar){
       DB = row.data; LAST_SYNC = row.updated_at;
       if(row.store_name) USER.store = row.store_name;
       aplicarMarca(); render();
-      if(avisar) toast('⚠️ Outro aparelho salvou primeiro — tela atualizada, repita sua última ação', true);
+      if(avisar) toast('🔄 Atualizado com outro aparelho');
     }
   }catch(e){}
 }
