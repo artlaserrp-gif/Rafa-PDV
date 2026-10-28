@@ -181,10 +181,10 @@ body.isAdmin .adminOnly{display:flex !important}
   box-shadow:0 10px 30px rgba(255,255,255,.15); align-items:center; gap:8px}
 #cartFab .ct{background:#141416; color:var(--lime); border-radius:99px; padding:1px 9px; font-size:13px}
 
-body.kiosk aside .navBtn[data-v]:not([data-v="pdv"]){display:none}
+body.kiosk aside .navBtn[data-v]:not([data-v="pdv"]):not([data-v="produtos"]){display:none}
 body.kiosk aside .storeBadge{display:none}
 body.kiosk aside .logoutBtn{display:none}
-body.kiosk #bottomNav button[data-v]:not([data-v="pdv"]){display:none}
+body.kiosk #bottomNav button[data-v]:not([data-v="pdv"]):not([data-v="produtos"]){display:none}
 .kioskLock{display:none !important}
 body.kiosk .kioskLock{display:flex !important}
 .kioskBanner{display:none}
@@ -764,7 +764,7 @@ function aplicarMarca(){
 
 /* =================== NAV =================== */
 function go(v){
-  if(KIOSK) v = 'pdv';
+  if(KIOSK && v!=='pdv' && v!=='produtos') v = 'pdv';
   VIEW=v;
   document.querySelectorAll('[data-v]').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
   render();
@@ -1188,7 +1188,7 @@ function openProdForm(id){
     </div>
     <div style="height:16px"></div>
     <button class="btn block" onclick="saveProd('${id||''}')">${p?'Salvar alterações':'Cadastrar produto'}</button>
-    ${p?`<div style="height:8px"></div><button class="btn danger block sm" onclick="delProd('${p.id}')">Excluir produto</button>`:''}
+    ${p&&!KIOSK?`<div style="height:8px"></div><button class="btn danger block sm" onclick="delProd('${p.id}')">Excluir produto</button>`:''}
   `);
   if(PREFILL){
     $('#pfName').value = PREFILL.name || '';
@@ -1216,6 +1216,7 @@ async function saveProd(id){
   await saveDB(); closeModal(); render(); toast(id?'Produto atualizado':'Produto cadastrado');
 }
 async function delProd(id){
+  if(KIOSK) return toast('Só o gestor pode excluir produtos', true);
   if(!confirm('Excluir este produto? As vendas antigas continuam no histórico.')) return;
   DB.products = DB.products.filter(p=>p.id!==id);
   await saveDB(); closeModal(); render(); toast('Produto excluído');
@@ -1712,9 +1713,8 @@ function viewRelatorios(){
   },0) - s.discount, 0);
   const ticket = sales.length? tot/sales.length : 0;
   // top produtos
-  const cnt = {};
-  sales.forEach(s=>s.items.forEach(i=>{ cnt[i.name]=(cnt[i.name]||0)+i.qty; }));
-  const top = Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const top = topVendidos(sales, 10);
+  const totUn = top.reduce((a,t)=>a+t.qty,0);
   return `
   <div class="pageHead"><div><h2>Relatório de vendas</h2><div class="sub">${repRange==='dia'&&repDia ? 'Dia '+new Date(repDia+'T12:00:00').toLocaleDateString('pt-BR')+' — ' : ''}${sales.length} venda(s) no período</div></div>
     <div style="display:flex; gap:7px; flex-wrap:wrap; align-items:center">
@@ -1736,8 +1736,8 @@ function viewRelatorios(){
     <div class="stat"><div class="lb">Itens vendidos</div><div class="vl">${itens}</div></div>
     <div class="stat"><div class="lb">Ticket médio</div><div class="vl">${fmt(ticket)}</div></div>
   </div>
-  ${top.length?`<div class="card" style="margin-bottom:14px"><h3 style="font-size:16px; margin-bottom:6px">Mais vendidos</h3>
-    ${top.map(([n,q],i)=>`<div class="totRow"><span class="muted">${i+1}. ${esc(n)}</span><span class="money">${q} un.</span></div>`).join('')}</div>`:''}
+  ${top.length?`<div class="card" style="margin-bottom:14px"><div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px"><h3 style="font-size:16px">🏆 10 mais vendidos</h3><button class="payBtn" onclick="baixarRankingPDF()">📄 PDF</button></div>
+    ${top.map((t,i)=>`<div class="listRow" style="padding:9px 0"><div style="width:26px; font-weight:800; color:${i<3?'var(--amber)':'var(--muted)'}">${i+1}º</div><div class="inf"><div class="nm">${esc(t.name)}</div><div class="sb">${fmt(t.total)} faturado${t.stock!==null?' • estoque: '+t.stock+' un.':''}</div></div><div class="money">${t.qty} un.</div></div>`).join('')}</div>`:''}
   <h3 style="font-size:17px; margin-bottom:8px">Vendas</h3>
   <div class="card" style="padding:6px 16px">
     ${sales.length===0?'<div class="empty"><div class="big">🧾</div>Nenhuma venda no período</div>':
@@ -1760,6 +1760,54 @@ function viewRelatorios(){
       </div>`).join('')}
   </div>`:''}`;
 }
+/* =================== MAIS VENDIDOS =================== */
+function topVendidos(sales, n){
+  const mapa = {};
+  sales.forEach(s=>(s.items||[]).forEach(i=>{
+    const k = i.pid || i.name;
+    const o = mapa[k] || (mapa[k] = { pid:i.pid, name:i.name, qty:0, total:0 });
+    o.qty += i.qty; o.total += i.price*i.qty;
+  }));
+  return Object.values(mapa).sort((a,b)=>b.qty-a.qty || b.total-a.total).slice(0,n).map(t=>{
+    const p = DB.products.find(x=>x.id===t.pid);
+    t.code = p ? (p.code||'') : ''; t.stock = p ? p.stock : null;
+    if(p) t.name = p.name;
+    return t;
+  });
+}
+async function baixarRankingPDF(){
+  const { sales, label } = vendasDoPeriodo();
+  const ativas = sales.filter(s=>!s.cancelled);
+  const top = topVendidos(ativas, 10);
+  if(!top.length) return toast('Nenhuma venda no período selecionado', true);
+  toast('Gerando PDF…');
+  try{
+    if(!window.jspdf) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    if(!window.jspdf.jsPDF.API.autoTable) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+  }catch(e){ return toast('Preciso de internet para gerar o PDF', true); }
+  const money = v => fmt(v||0).replace(/ /g,' ');
+  const totItens = ativas.reduce((a,s)=>a+s.items.reduce((b,i)=>b+i.qty,0),0);
+  const doc = new window.jspdf.jsPDF();
+  doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(10,15,26);
+  doc.text('OFIR ERP — 10 produtos mais vendidos', 14, 16);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(70,80,95);
+  doc.text('Loja: ' + (USER.store||''), 14, 23);
+  doc.text('Período: ' + label + ' • ' + ativas.length + ' venda(s) • ' + totItens + ' item(ns) vendidos', 14, 28.5);
+  doc.text('Gerado em ' + new Date().toLocaleString('pt-BR'), 14, 34);
+  doc.setDrawColor(214,219,228); doc.line(14, 37.5, 196, 37.5);
+  doc.autoTable({
+    startY: 42,
+    head: [['#','Produto','Código','Qtd. vendida','% das vendas','Faturamento','Estoque']],
+    body: top.map((t,i)=>[ (i+1)+'º', t.name, t.code||'-', String(t.qty), totItens? (t.qty/totItens*100).toFixed(1).replace('.',',')+'%' : '-', money(t.total), t.stock===null?'-':String(t.stock) ]),
+    styles: { font:'helvetica', fontSize:9.5, cellPadding:3, textColor:[30,38,52] },
+    headStyles: { fillColor:[10,10,12], textColor:[94,234,212], fontStyle:'bold' },
+    alternateRowStyles: { fillColor:[247,249,252] },
+    columnStyles: { 0:{ cellWidth:12, fontStyle:'bold' }, 3:{ halign:'center', fontStyle:'bold' }, 4:{ halign:'center' }, 5:{ halign:'right' }, 6:{ halign:'center' } }
+  });
+  doc.save('mais-vendidos-' + new Date().toISOString().slice(0,10) + '.pdf');
+  toast('PDF dos mais vendidos baixado! 🏆');
+}
+
 async function baixarRelatorioPDF(){
   const { sales, label } = vendasDoPeriodo();
   if(sales.length === 0) return toast('Nenhuma venda no período selecionado', true);
