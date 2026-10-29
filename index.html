@@ -608,6 +608,7 @@ async function mesclarComServidor(){
     servidor.sellers = uniaoPorId(local.sellers, servidor.sellers).unidos;
     servidor.logo = local.logo || servidor.logo;
     servidor.cancelPassHash = servidor.cancelPassHash || local.cancelPassHash;
+    servidor.loja = servidor.loja || local.loja;
     servidor.nfImported = [...new Set([...(servidor.nfImported||[]), ...(local.nfImported||[])])];
 
     DB = servidor;
@@ -760,6 +761,7 @@ function enterApp(){
   applyKiosk();
   document.body.classList.toggle('isAdmin', IS_ADMIN);
   go('pdv');
+  blingRetorno();
   const { atrasados, totalPend } = fiadoResumo();
   if(atrasados.length>0){
     setTimeout(()=>toast('💰 '+atrasados.length+' fiado(s) atrasado(s) — confira a aba Fiado', true), 2600);
@@ -784,7 +786,7 @@ function render(){
   if(VIEW==='pdv') m.innerHTML = viewPDV();
   else if(VIEW==='produtos') m.innerHTML = viewProdutos();
   else if(VIEW==='caixa') m.innerHTML = viewCaixa();
-  else if(VIEW==='vendedores') m.innerHTML = viewVendedores();
+  else if(VIEW==='vendedores'){ m.innerHTML = viewVendedores(); blingCarregarStatus(); }
   else if(VIEW==='relatorios') m.innerHTML = viewRelatorios();
   else if(VIEW==='fiado') m.innerHTML = viewFiado();
   else if(VIEW==='admin') m.innerHTML = viewAdmin();
@@ -994,6 +996,7 @@ async function finishSale(){
   const troco = sale.change;
   CART=[]; PDV.discount=0; PDV.received=''; PDV.clientId=''; PDV.dueDate=''; ADD_CLIENT_MODE=false;
   closeModal(); render();
+  if(lojaCfg().perguntar) abrirPosVenda(sale.id);
   toast(PDV.pay==='Fiado' ? 'Fiado registrado para '+sale.clientName+' • '+fmt(sale.total) : 'Venda concluída! '+fmt(sale.total)+(troco>0?' • Troco: '+fmt(troco):''));
 }
 
@@ -1395,6 +1398,223 @@ async function confirmarImport(){
   toast('Importado! '+somados+' atualizado(s) e '+novos+' novo(s) 📥');
 }
 
+/* =================== BLING (cupom fiscal) =================== */
+let BLING = { conectado:null };
+async function blingInvoke(body){
+  const { data, error } = await sb.functions.invoke('bling-auth', { body });
+  if(error) throw error;
+  return data || {};
+}
+async function blingCarregarStatus(){
+  try{ const d = await blingInvoke({ acao:'status' }); BLING.conectado = !!d.conectado; }
+  catch(e){ BLING.conectado = null; }
+  blingPintar();
+}
+function blingPintar(){
+  const t = document.getElementById('blingStatusTxt'), b = document.getElementById('blingBtns');
+  if(!t || !b) return;
+  if(BLING.conectado === true){
+    t.innerHTML = '<span class="tag green">Conectado</span> Sua conta do Bling está ligada ao OFIR ERP.';
+    b.innerHTML = '<button class="btn sm ghost" onclick="blingDesconectar()">Desconectar</button>';
+  } else if(BLING.conectado === false){
+    t.textContent = 'Ligue sua conta do Bling para emitir cupom fiscal (NFC-e) pelo OFIR ERP.';
+    b.innerHTML = '<button class="btn sm cyan" onclick="blingConectar()">🔗 Conectar ao Bling</button>';
+  } else {
+    t.textContent = 'Não consegui verificar a conexão agora.';
+    b.innerHTML = '<button class="btn sm cyan" onclick="blingConectar()">🔗 Conectar ao Bling</button>';
+  }
+}
+async function blingConectar(){
+  toast('Abrindo o Bling…');
+  try{
+    const d = await blingInvoke({ acao:'conectar' });
+    if(d.erro) return toast(d.erro, true);
+    window.location.href = d.url;
+  }catch(e){ toast('Não consegui falar com o servidor. A função bling-auth já foi publicada no Supabase?', true); }
+}
+async function blingDesconectar(){
+  if(!confirm('Desconectar o Bling? Você poderá conectar de novo quando quiser.')) return;
+  try{ await blingInvoke({ acao:'desconectar' }); BLING.conectado = false; blingPintar(); toast('Bling desconectado'); }
+  catch(e){ toast('Não consegui desconectar agora', true); }
+}
+function blingRetorno(){
+  try{
+    const u = new URL(window.location.href), r = u.searchParams.get('bling');
+    if(!r) return;
+    u.searchParams.delete('bling'); window.history.replaceState({}, '', u.pathname + (u.search||'') + u.hash);
+    setTimeout(()=>toast(r==='ok' ? 'Bling conectado com sucesso! 🔗' : 'Não foi possível conectar o Bling. Tente de novo.', r!=='ok'), 800);
+  }catch(e){}
+}
+
+/* =================== COMPROVANTE DE VENDA =================== */
+function lojaCfg(){ return Object.assign({ razao:'', cnpj:'', end:'', fone:'', msg:'Obrigado pela preferência! Volte sempre.', largura:'80', perguntar:true }, DB.loja||{}); }
+function openLojaCfgForm(){
+  const c = lojaCfg();
+  openModal(`
+    <h3>🧾 Dados do comprovante</h3>
+    <p class="muted" style="font-size:13.5px">Estas informações saem no topo do comprovante que você entrega ao cliente.</p>
+    <label>Razão social (opcional)</label><input id="lcRazao" value="${esc(c.razao)}" placeholder="Ex.: Rafa Acessórios Ltda">
+    <label>CNPJ ou CPF</label><input id="lcCnpj" value="${esc(c.cnpj)}" placeholder="00.000.000/0001-00" inputmode="numeric">
+    <label>Endereço</label><input id="lcEnd" value="${esc(c.end)}" placeholder="Rua, número - bairro - cidade/UF">
+    <label>Telefone / WhatsApp</label><input id="lcFone" value="${esc(c.fone)}" placeholder="(16) 90000-0000" inputmode="tel">
+    <label>Mensagem no rodapé</label><input id="lcMsg" value="${esc(c.msg)}" placeholder="Ex.: Troca em até 7 dias com este comprovante">
+    <label>Impressora</label>
+    <select id="lcLarg">
+      <option value="80" ${c.largura==='80'?'selected':''}>Térmica de cupom 80 mm</option>
+      <option value="58" ${c.largura==='58'?'selected':''}>Térmica de cupom 58 mm</option>
+      <option value="a4" ${c.largura==='a4'?'selected':''}>Impressora comum (folha A4)</option>
+    </select>
+    <label>Depois de cada venda</label>
+    <select id="lcPerg">
+      <option value="1" ${c.perguntar?'selected':''}>Mostrar o botão "Comprovante"</option>
+      <option value="0" ${!c.perguntar?'selected':''}>Não mostrar (venda direto)</option>
+    </select>
+    <div style="height:16px"></div>
+    <button class="btn block" onclick="saveLojaCfg()">Salvar</button>
+  `);
+}
+async function saveLojaCfg(){
+  DB.loja = {
+    razao:$('#lcRazao').value.trim(), cnpj:$('#lcCnpj').value.trim(), end:$('#lcEnd').value.trim(),
+    fone:$('#lcFone').value.trim(), msg:$('#lcMsg').value.trim(), largura:$('#lcLarg').value, perguntar:$('#lcPerg').value==='1'
+  };
+  await saveDB(); closeModal(); render(); toast('Dados do comprovante salvos');
+}
+function dataHoraCompleta(ts){ return new Date(ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+/* Monta o comprovante como uma lista de linhas — usada tanto na tela/impressão quanto no PDF */
+function reciboLinhas(s){
+  const cfg = lojaCfg();
+  const m = v => fmt(v||0).replace(/ /g,' ');
+  const L = [];
+  const C = (t,o)=>L.push(Object.assign({k:'c',t},o||{}));
+  const LR = (a,b,o)=>L.push(Object.assign({k:'lr',a,b},o||{}));
+  const SEP = ()=>L.push({k:'sep'});
+  C(USER.store||'Loja',{bold:true,big:true});
+  if(cfg.razao) C(cfg.razao);
+  if(cfg.cnpj) C('CNPJ/CPF: '+cfg.cnpj);
+  if(cfg.end) C(cfg.end);
+  if(cfg.fone) C('Tel/WhatsApp: '+cfg.fone);
+  SEP();
+  C('COMPROVANTE DE VENDA',{bold:true});
+  C('Documento sem valor fiscal',{small:true});
+  if(s.cancelled) C('*** VENDA CANCELADA ***',{bold:true});
+  SEP();
+  LR('Data', dataHoraCompleta(s.at));
+  LR('Venda', '#'+String(s.id).slice(-6).toUpperCase());
+  LR('Vendedor(a)', s.sellerName||'-');
+  if(s.clientName) LR('Cliente', s.clientName);
+  SEP();
+  (s.items||[]).forEach(i=>{
+    L.push({k:'l',t:i.name,bold:true});
+    LR(i.qty+' x '+m(i.price), m(i.price*i.qty));
+  });
+  SEP();
+  const sub = (s.items||[]).reduce((a,i)=>a+i.price*i.qty,0);
+  if(s.discount>0){ LR('Subtotal', m(sub)); LR('Desconto', '- '+m(s.discount)); }
+  LR('TOTAL', m(s.total), {bold:true,big:true});
+  LR('Pagamento', s.payment);
+  if(s.payment==='Dinheiro' && s.change>0){ LR('Recebido', m(s.received)); LR('Troco', m(s.change)); }
+  if(s.payment==='Fiado') C('A PAGAR ATE '+(s.dueDate ? new Date(s.dueDate+'T12:00:00').toLocaleDateString('pt-BR') : 'a combinar'),{bold:true});
+  SEP();
+  if(cfg.msg) cfg.msg.split('\n').forEach(t=>C(t));
+  C('Emitido por OFIR ERP',{small:true});
+  return L;
+}
+function reciboHTML(s){
+  return reciboLinhas(s).map(l=>{
+    const st = (l.bold?'font-weight:700;':'')+(l.big?'font-size:1.25em;':'')+(l.small?'font-size:.82em;':'');
+    if(l.k==='sep') return '<div class="sep"></div>';
+    if(l.k==='c') return `<div class="c" style="${st}">${esc(l.t)}</div>`;
+    if(l.k==='l') return `<div class="l" style="${st}">${esc(l.t)}</div>`;
+    return `<div class="lr" style="${st}"><span>${esc(l.a)}</span><span>${esc(l.b)}</span></div>`;
+  }).join('');
+}
+const RECIBO_CSS = `.rc{font-family:'Courier New',Courier,monospace;color:#000;font-size:12px;line-height:1.35}
+.rc .c{text-align:center;word-break:break-word}.rc .l{word-break:break-word;margin-top:3px}
+.rc .lr{display:flex;justify-content:space-between;gap:8px}.rc .lr span:last-child{text-align:right;white-space:nowrap}
+.rc .sep{border-top:1px dashed #000;margin:6px 0}`;
+function larguraRecibo(){ const l = lojaCfg().largura; return l==='58' ? '48mm' : l==='a4' ? '80mm' : '72mm'; }
+function openComprovante(id){
+  const s = DB.sales.find(x=>x.id===id); if(!s) return;
+  openModal(`
+    <h3>🧾 Comprovante de venda</h3>
+    <div style="background:#fff; border-radius:10px; padding:14px 12px; margin:10px 0; max-height:48vh; overflow:auto"><style>${RECIBO_CSS}</style><div class="rc" style="max-width:340px; margin:0 auto">${reciboHTML(s)}</div></div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <button class="btn" style="flex:1" onclick="imprimirComprovante('${id}')">🖨️ Imprimir</button>
+      <button class="btn cyan" style="flex:1" onclick="baixarComprovantePDF('${id}')">📤 PDF / WhatsApp</button>
+    </div>
+    <div style="height:8px"></div>
+    <button class="btn ghost block sm" onclick="closeModal()">Fechar</button>
+    <p class="muted" style="font-size:12px; margin-top:10px">Os dados da loja (CNPJ, endereço, telefone) são configurados na aba <b>Loja → 🧾 Dados do comprovante</b>.</p>
+  `);
+}
+function abrirPosVenda(id){
+  const s = DB.sales.find(x=>x.id===id); if(!s) return;
+  openModal(`
+    <h3>✅ Venda concluída</h3>
+    <p class="muted" style="font-size:14px">${fmt(s.total)} • ${esc(s.payment)}${s.change>0?' • Troco '+fmt(s.change):''}</p>
+    <div style="height:10px"></div>
+    <button class="btn block" onclick="openComprovante('${id}')">🧾 Comprovante para o cliente</button>
+    <div style="height:8px"></div>
+    <button class="btn ghost block" onclick="closeModal()">Nova venda</button>
+  `);
+}
+function imprimirComprovante(id){
+  const s = DB.sales.find(x=>x.id===id); if(!s) return;
+  const a4 = lojaCfg().largura==='a4';
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Comprovante</title><style>
+    @page{ size:${a4?'A4':(lojaCfg().largura==='58'?'58mm':'80mm')+' auto'}; margin:${a4?'12mm':'2mm'}; }
+    html,body{margin:0;padding:0;background:#fff} body{width:${larguraRecibo()};${a4?'margin:0 auto;':''}}
+    ${RECIBO_CSS}
+  </style></head><body><div class="rc">${reciboHTML(s)}</div></body></html>`;
+  const velho = document.getElementById('printFrame'); if(velho) velho.remove();
+  const fr = document.createElement('iframe');
+  fr.id = 'printFrame'; fr.setAttribute('aria-hidden','true');
+  fr.style.cssText = 'position:fixed; right:0; bottom:0; width:0; height:0; border:0; opacity:0';
+  document.body.appendChild(fr);
+  fr.onload = ()=>{ setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ toast('Não consegui abrir a impressão — use o botão PDF', true); } }, 200); };
+  fr.srcdoc = html;
+}
+async function baixarComprovantePDF(id){
+  const s = DB.sales.find(x=>x.id===id); if(!s) return;
+  toast('Gerando PDF…');
+  try{ if(!window.jspdf) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'); }
+  catch(e){ return toast('Preciso de internet para gerar o PDF', true); }
+  const W = lojaCfg().largura==='58' ? 58 : 80, mg = 4, tw = W-mg*2;
+  const base = 7.5, lh = 3.6;
+  const L = reciboLinhas(s).map(l=>{ // PDF usa fonte padrão: troca caracteres fora do alfabeto latino
+    const f = t => (t==null?'':String(t)).replace(/[^\x20-\x7E -ÿ]/g,'');
+    return Object.assign({}, l, { t:f(l.t), a:f(l.a), b:f(l.b) });
+  });
+  const desenhar = (doc)=>{
+    let y = mg+2;
+    L.forEach(l=>{
+      const size = base*(l.big?1.25:1)*(l.small?.85:1);
+      doc.setFont('courier', l.bold ? 'bold' : 'normal'); doc.setFontSize(size);
+      const h = lh*(size/base);
+      if(l.k==='sep'){ doc.setLineDashPattern([0.6,0.6],0); doc.line(mg,y,W-mg,y); doc.setLineDashPattern([],0); y+=2.2; return; }
+      if(l.k==='lr'){
+        const bw = doc.getTextWidth(l.b);
+        const linhasA = doc.splitTextToSize(l.a, Math.max(tw-bw-2, 10));
+        doc.text(linhasA[0]||'', mg, y+h*.75); doc.text(l.b, W-mg, y+h*.75, {align:'right'}); y += h;
+        for(let i=1;i<linhasA.length;i++){ doc.text(linhasA[i], mg, y+h*.75); y+=h; }
+        return;
+      }
+      doc.splitTextToSize(l.t, tw).forEach(t=>{
+        if(l.k==='c') doc.text(t, W/2, y+h*.75, {align:'center'}); else doc.text(t, mg, y+h*.75);
+        y += h;
+      });
+    });
+    return y;
+  };
+  const { jsPDF } = window.jspdf;
+  const alt = desenhar(new jsPDF({unit:'mm', format:[W, 400]})) + mg;
+  const doc = new jsPDF({unit:'mm', format:[W, Math.max(alt, 60)]});
+  desenhar(doc);
+  doc.save('comprovante-' + String(s.id).slice(-6).toUpperCase() + '.pdf');
+  toast('Comprovante em PDF pronto! 📤');
+}
+
 /* =================== CAIXA =================== */
 function cashSummary(){
   const c = DB.cash;
@@ -1530,6 +1750,22 @@ function viewVendedores(){
           <div class="inf"><div class="nm">${esc(s.name)}</div><div class="sb">${vendas.length} venda(s) • total ${fmt(tot)}</div></div>
           <button class="btn sm ghost" onclick="openSellerForm('${s.id}')">Editar</button>
         </div>`; }).join('')}
+  </div>
+  <div style="height:16px"></div>
+  <div class="card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+    <div style="flex:1; min-width:180px">
+      <div class="nm" style="font-weight:800">Cupom fiscal • Bling</div>
+      <div class="sb muted" style="font-size:12.5px" id="blingStatusTxt">Verificando conexão…</div>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap" id="blingBtns"></div>
+  </div>
+  <div style="height:16px"></div>
+  <div class="card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+    <div style="flex:1; min-width:180px">
+      <div class="nm" style="font-weight:800">Comprovante de venda</div>
+      <div class="sb muted" style="font-size:12.5px">${lojaCfg().cnpj||lojaCfg().end?'CNPJ, endereço e telefone que saem no cupom do cliente.':'Preencha CNPJ, endereço e telefone para sair no cupom do cliente.'}</div>
+    </div>
+    <button class="btn sm cyan" onclick="openLojaCfgForm()">🧾 Dados do comprovante</button>
   </div>
   <div style="height:16px"></div>
   <div class="card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
@@ -1887,7 +2123,8 @@ function openSaleDetail(id){
     ${s.discount>0?`<div class="totRow"><span class="muted">Desconto</span><span class="money" style="color:var(--amber)">− ${fmt(s.discount)}</span></div>`:''}
     <div class="totRow big"><span>Total</span><span class="money" style="color:var(--lime)">${fmt(s.total)}</span></div>
     ${s.change>0?`<div class="totRow"><span class="muted">Recebido ${fmt(s.received)} • Troco</span><span class="money">${fmt(s.change)}</span></div>`:''}
-    ${!s.cancelled?`<div style="height:16px"></div><button class="btn danger block sm" onclick="pedirSenhaCancelamento('${s.id}')">↩ Cancelar venda / Devolução</button>`:''}
+    <div style="height:16px"></div><button class="btn cyan block sm" onclick="openComprovante('${s.id}')">🧾 Comprovante / Imprimir</button>
+    ${!s.cancelled?`<div style="height:8px"></div><button class="btn danger block sm" onclick="pedirSenhaCancelamento('${s.id}')">↩ Cancelar venda / Devolução</button>`:''}
   `);
 }
 function pedirSenhaCancelamento(id){
