@@ -309,6 +309,14 @@ const dstr = ts => new Date(ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-d
 const dayKey = ts => new Date(ts).toLocaleDateString('pt-BR');
 function toast(msg, err){ const t=$('#toast'); t.textContent=msg; t.className=err?'err show':'show'; clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2400); }
 function hash(s){ let h=5381; for(let i=0;i<s.length;i++){ h=((h<<5)+h+s.charCodeAt(i))|0; } return 'h'+(h>>>0).toString(36); }
+/* Busca esperta: ignora maiúscula, acento e símbolos; aceita palavras fora de ordem */
+const semAcento = t => (t==null?'':String(t)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/ç/g,'c').replace(/[^a-z0-9]+/g,' ').trim();
+function buscaOk(texto, termo){
+  const q = semAcento(termo); if(!q) return true;
+  const t = semAcento(texto);
+  if(q.split(' ').every(w=>t.includes(w))) return true;
+  return t.replace(/ /g,'').includes(q.replace(/ /g,''));
+}
 const num = v => { const n = parseFloat(String(v).replace(',','.')); return isNaN(n)?0:n; };
 
 /* =================== NUVEM (SUPABASE) =================== */
@@ -797,7 +805,7 @@ function updateFab(){
 }
 function viewPDV(){
   const cash = DB.cash;
-  const prods = DB.products.filter(p=>!pdvSearch || (p.name+' '+(p.code||'')).toLowerCase().includes(pdvSearch.toLowerCase()));
+  const prods = DB.products.filter(p=>buscaOk(p.name+' '+(p.code||'')+' '+(p.cat||''), pdvSearch));
   return `
   <div class="pageHead"><div><h2>Ponto de venda</h2><div class="sub">${cash.open?`<span class="tag green">Caixa aberto</span> desde ${dstr(cash.openedAt)}`:'<span class="tag red">Caixa fechado</span> — abra o caixa para vender'}</div></div>
     ${!cash.open?`<button class="btn sm cyan" onclick="go('caixa')">Abrir caixa</button>`:''}
@@ -821,7 +829,7 @@ function prodCardsHTML(prods){
     </button>`).join('');
 }
 function refreshProdGrid(){
-  const prods = DB.products.filter(p=>!pdvSearch || (p.name+' '+(p.code||'')).toLowerCase().includes(pdvSearch.toLowerCase()));
+  const prods = DB.products.filter(p=>buscaOk(p.name+' '+(p.code||'')+' '+(p.cat||''), pdvSearch));
   $('#prodGrid').innerHTML = prodCardsHTML(prods);
 }
 function cartHTML(){
@@ -991,7 +999,7 @@ async function finishSale(){
 
 /* =================== PRODUTOS =================== */
 function viewProdutos(){
-  const prods = DB.products.filter(p=>!prodSearch || (p.name+' '+(p.code||'')).toLowerCase().includes(prodSearch.toLowerCase()));
+  const prods = DB.products.filter(p=>buscaOk(p.name+' '+(p.code||'')+' '+(p.cat||''), prodSearch));
   const low = DB.products.filter(p=>p.stock<=(p.min||5)).length;
   return `
   <div class="pageHead"><div><h2>Produtos e estoque</h2><div class="sub">${DB.products.length} produto(s) ${low>0?`• <span style="color:var(--amber)">${low} com estoque baixo</span>`:''}</div></div>
@@ -1036,7 +1044,7 @@ function prodRowsHTML(prods){
 function refreshProdList(){
   const el = document.getElementById('listaProdutos');
   if(!el) return;
-  const prods = DB.products.filter(p=>!prodSearch || (p.name+' '+(p.code||'')).toLowerCase().includes(prodSearch.toLowerCase()));
+  const prods = DB.products.filter(p=>buscaOk(p.name+' '+(p.code||'')+' '+(p.cat||''), prodSearch));
   el.innerHTML = prodRowsHTML(prods);
 }
 let PEDIDO_ITEMS = [];
@@ -1289,7 +1297,7 @@ function acharProdutoImport(i){
   const cod = (i.code||'').trim().toLowerCase();
   let p = null;
   if(cod) p = DB.products.find(x=>(x.code||'').trim().toLowerCase()===cod);
-  if(!p) p = DB.products.find(x=>x.name.trim().toLowerCase()===i.name.trim().toLowerCase());
+  if(!p) p = DB.products.find(x=>semAcento(x.name)===semAcento(i.name));
   return p || null;
 }
 function lerXMLImport(txt, nomeArq){
@@ -2072,7 +2080,7 @@ function viewAdmin(){
   comStatus.forEach(x=>contagem[x.st.grupo]++);
   let filtrados = comStatus;
   if(adminFiltro!=='todos') filtrados = filtrados.filter(x=>x.st.grupo===adminFiltro);
-  if(termo) filtrados = filtrados.filter(x=>(x.l.store+' '+x.l.cpf+' '+x.l.phone).toLowerCase().includes(termo));
+  if(termo) filtrados = filtrados.filter(x=>buscaOk(x.l.store+' '+x.l.cpf+' '+x.l.phone, adminSearch));
   return `
   <div class="pageHead"><div><h2>Admin • Lojas</h2><div class="sub">${ADMIN_LOJAS.length} loja(s) cadastradas no OFIR ERP</div></div>
     <button class="btn sm ghost" onclick="ADMIN_LOJAS=null; render()">🔄 Atualizar</button></div>
@@ -2110,7 +2118,7 @@ function refreshAdminList(){
   const termo = adminSearch.toLowerCase();
   let itens = ADMIN_LOJAS.map(l=>({ l, st: adminStatus(l) }));
   if(adminFiltro!=='todos') itens = itens.filter(x=>x.st.grupo===adminFiltro);
-  if(termo) itens = itens.filter(x=>(x.l.store+' '+x.l.cpf+' '+x.l.phone).toLowerCase().includes(termo));
+  if(termo) itens = itens.filter(x=>buscaOk(x.l.store+' '+x.l.cpf+' '+x.l.phone, adminSearch));
   el.innerHTML = adminRowsHTML(itens);
 }
 async function salvarAssinaturaAdmin(userId){
