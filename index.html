@@ -1007,7 +1007,7 @@ function viewProdutos(){
   const low = DB.products.filter(p=>p.stock<=(p.min||5)).length;
   return `
   <div class="pageHead"><div><h2>Produtos e estoque</h2><div class="sub">${DB.products.length} produto(s) ${low>0?`• <span style="color:var(--amber)">${low} com estoque baixo</span>`:''}</div></div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap"><button class="btn sm cyan" onclick="openImportNF()">📥 Importar nota</button><button class="btn sm" onclick="openProdForm()">+ Novo produto</button></div></div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap"><button class="btn sm cyan" onclick="openImportNF()">📥 Importar nota</button><button class="btn sm ghost" onclick="openNcmLote()">🏷️ NCM em lote</button><button class="btn sm" onclick="openProdForm()">+ Novo produto</button></div></div>
   ${low>0?`<div class="card" style="margin-bottom:12px; border-color:rgba(242,193,78,.5); display:flex; align-items:center; gap:12px; flex-wrap:wrap">
     <div style="flex:1; min-width:180px">
       <div class="nm" style="font-weight:800; color:var(--amber)">⚠️ Estoque baixo</div>
@@ -1398,6 +1398,64 @@ async function confirmarImport(){
   IMP.notas.forEach(n=>{ if(n.chave && !DB.nfImported.includes(n.chave)) DB.nfImported.push(n.chave); });
   await saveDB(); closeModal(); render();
   toast('Importado! '+somados+' atualizado(s) e '+novos+' novo(s) 📥');
+}
+
+
+/* =================== NCM EM LOTE (exportar / importar planilha) =================== */
+function openNcmLote(){
+  const sem = DB.products.filter(p=>!(p.ncm||'').replace(/\D/g,'')).length;
+  openModal(`
+    <h3>🏷️ NCM em lote</h3>
+    <p class="muted" style="font-size:13.5px">${sem} de ${DB.products.length} produto(s) estão sem NCM.</p>
+    <div class="card" style="margin-bottom:12px"><b>1) Baixar a lista</b><div class="sb muted" style="margin:4px 0 8px">Baixa uma planilha com todos os produtos. Preencha (ou peça pra Claude preencher) a coluna <b>ncm</b>.</div>
+      <button class="btn sm cyan" onclick="exportarNcmCSV()">📤 Baixar planilha de produtos</button></div>
+    <div class="card"><b>2) Subir a planilha preenchida</b><div class="sb muted" style="margin:4px 0 8px">Só atualiza o NCM. Preço, custo e estoque não mudam.</div>
+      <input type="file" accept=".csv,.txt,text/csv" style="font-size:16px" onchange="lerNcmCSV(this.files[0])"></div>
+    <div id="ncmPreview"></div>
+  `);
+}
+function exportarNcmCSV(){
+  const q = v => '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const linhas = ['id;codigo;nome;categoria;ncm'];
+  DB.products.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>linhas.push([p.id,p.code||'',p.name,p.cat||'',(p.ncm||'')].map(q).join(';')));
+  const blob = new Blob(['\ufeff'+linhas.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'produtos-ncm.csv';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  toast('Planilha baixada 📤');
+}
+let NCMLOTE = [];
+async function lerNcmCSV(f){
+  if(!f) return;
+  const txt = await f.text();
+  const linhas = txt.replace(/^\ufeff/,'').split(/\r?\n/).filter(l=>l.trim());
+  if(linhas.length<2) return toast('Planilha vazia', true);
+  const sep = (linhas[0].match(/;/g)||[]).length >= (linhas[0].match(/,/g)||[]).length ? ';' : ',';
+  const cel = l => { const o=[]; let c='', q=false; for(let i=0;i<l.length;i++){ const ch=l[i]; if(ch==='"'){ if(q && l[i+1]==='"'){c+='"';i++;} else q=!q; } else if(ch===sep && !q){o.push(c);c='';} else c+=ch; } o.push(c); return o.map(x=>x.trim()); };
+  const cab = cel(linhas[0]).map(c=>c.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+  const iId=cab.indexOf('id'), iCod=cab.findIndex(c=>c.startsWith('cod')), iNome=cab.findIndex(c=>c.startsWith('nome')||c.startsWith('produto')), iNcm=cab.findIndex(c=>c.includes('ncm'));
+  if(iNcm<0 || (iId<0 && iCod<0 && iNome<0)) return toast('Preciso das colunas id (ou codigo/nome) e ncm', true);
+  NCMLOTE = []; let semMatch = 0, invalidos = 0;
+  linhas.slice(1).forEach(l=>{
+    const c = cel(l); const ncm = (c[iNcm]||'').replace(/\D/g,'');
+    if(!ncm) return;
+    if(ncm.length!==8){ invalidos++; return; }
+    let p = null;
+    if(iId>=0 && c[iId]) p = DB.products.find(x=>x.id===c[iId]);
+    if(!p && iCod>=0 && c[iCod]) p = DB.products.find(x=>x.code && x.code===c[iCod]);
+    if(!p && iNome>=0 && c[iNome]) p = DB.products.find(x=>semAcento(x.name)===semAcento(c[iNome]));
+    if(!p){ semMatch++; return; }
+    if((p.ncm||'').replace(/\D/g,'')!==ncm) NCMLOTE.push({ pid:p.id, name:p.name, ncm, antes:p.ncm||'' });
+  });
+  const el = $('#ncmPreview');
+  el.innerHTML = `<div style="margin-top:12px" class="sb"><b>${NCMLOTE.length}</b> produto(s) serão atualizados${semMatch?` • ${semMatch} linha(s) não encontrada(s)`:''}${invalidos?` • <span style="color:var(--amber)">${invalidos} NCM inválido(s) (precisa ter 8 números)</span>`:''}</div>
+    <div style="max-height:30vh; overflow:auto; margin-top:8px">${NCMLOTE.slice(0,200).map(x=>`<div class="listRow"><div class="inf"><div class="nm">${esc(x.name)}</div></div><div class="money" style="font-size:13px">${esc(x.ncm)}</div></div>`).join('')}</div>
+    ${NCMLOTE.length?`<div style="height:12px"></div><button class="btn block" onclick="aplicarNcmLote()">Atualizar ${NCMLOTE.length} NCM(s)</button>`:''}`;
+}
+async function aplicarNcmLote(){
+  NCMLOTE.forEach(x=>{ const p = DB.products.find(y=>y.id===x.pid); if(p) p.ncm = x.ncm; });
+  const n = NCMLOTE.length; NCMLOTE = [];
+  await saveDB(); closeModal(); render();
+  toast('NCM atualizado em '+n+' produto(s) 🏷️');
 }
 
 /* =================== BLING (cupom fiscal) =================== */
