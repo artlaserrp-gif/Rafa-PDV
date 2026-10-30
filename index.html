@@ -1415,7 +1415,7 @@ function blingPintar(){
   if(!t || !b) return;
   if(BLING.conectado === true){
     t.innerHTML = '<span class="tag green">Conectado</span> Sua conta do Bling está ligada ao OFIR ERP.';
-    b.innerHTML = '<button class="btn sm ghost" onclick="blingDesconectar()">Desconectar</button>';
+    b.innerHTML = '<button class="btn sm cyan" onclick="blingDiagnostico()">🔍 Testar leitura</button><button class="btn sm ghost" onclick="blingDesconectar()">Desconectar</button>';
   } else if(BLING.conectado === false){
     t.textContent = 'Ligue sua conta do Bling para emitir cupom fiscal (NFC-e) pelo OFIR ERP.';
     b.innerHTML = '<button class="btn sm cyan" onclick="blingConectar()">🔗 Conectar ao Bling</button>';
@@ -1436,6 +1436,40 @@ async function blingDesconectar(){
   if(!confirm('Desconectar o Bling? Você poderá conectar de novo quando quiser.')) return;
   try{ await blingInvoke({ acao:'desconectar' }); BLING.conectado = false; blingPintar(); toast('Bling desconectado'); }
   catch(e){ toast('Não consegui desconectar agora', true); }
+}
+let BLING_DIAG_TXT = '';
+async function blingDiagnostico(){
+  toast('Lendo dados do seu Bling…');
+  let d;
+  try{
+    const r = await sb.functions.invoke('bling-nfce', { body:{ acao:'diagnostico' } });
+    if(r.error){
+      let msg = ''; try{ const j = await r.error.context.json(); msg = j.erro || ''; }catch(e){}
+      return toast(msg || 'Não consegui falar com a função bling-nfce. Ela já foi publicada no Supabase?', true);
+    }
+    d = r.data || {};
+  }catch(e){ return toast('Não consegui falar com a função bling-nfce.', true); }
+  if(d.erro) return toast(d.erro, true);
+  const L = [];
+  const bloco = (titulo, b, fmtItem)=>{
+    L.push('## '+titulo+' (HTTP '+b.http+')');
+    if(b.erro) L.push('ERRO: '+JSON.stringify(b.erro));
+    (b.itens||[]).forEach(i=>L.push('- '+fmtItem(i)));
+    if(!b.erro && !(b.itens||[]).length) L.push('(nenhum registro)');
+  };
+  bloco('Naturezas de operação', d.naturezas||{}, i=>'id '+i.id+' | '+i.descricao+(i.situacao!=null?' | situacao '+i.situacao:'')+(i.padrao?' | PADRAO':''));
+  bloco('Formas de pagamento', d.formasPagamento||{}, i=>'id '+i.id+' | '+i.descricao+' | tipo '+i.tipoPagamento+' | situacao '+i.situacao+(i.padrao?' | PADRAO':''));
+  bloco('Últimas NFC-e', d.ultimasNfce||{}, i=>'id '+i.id+' | nº '+i.numero+' | série '+i.serie+' | situação '+i.situacao+' | '+(i.dataEmissao||''));
+  BLING_DIAG_TXT = L.join('\n');
+  openModal(`
+    <h3>🔍 Leitura do seu Bling</h3>
+    <p class="muted" style="font-size:13px">Só leitura. Nada foi criado nem enviado. Se aparecer erro 403, falta liberar essa permissão no aplicativo do Bling.</p>
+    <pre style="white-space:pre-wrap; word-break:break-word; font-size:12.5px; background:var(--panel2); padding:12px; border-radius:10px; max-height:46vh; overflow:auto">${esc(BLING_DIAG_TXT)}</pre>
+    <div style="height:10px"></div>
+    <button class="btn block" onclick="navigator.clipboard.writeText(BLING_DIAG_TXT).then(()=>toast('Copiado! Cole na conversa 📋'),()=>toast('Não consegui copiar — tire um print',true))">📋 Copiar resultado</button>
+    <div style="height:8px"></div>
+    <button class="btn ghost block sm" onclick="closeModal()">Fechar</button>
+  `);
 }
 function blingRetorno(){
   try{
