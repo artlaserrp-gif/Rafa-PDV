@@ -762,6 +762,7 @@ function enterApp(){
   document.body.classList.toggle('isAdmin', IS_ADMIN);
   go('pdv');
   blingRetorno();
+  blingCarregarStatus();
   const { atrasados, totalPend } = fiadoResumo();
   if(atrasados.length>0){
     setTimeout(()=>toast('💰 '+atrasados.length+' fiado(s) atrasado(s) — confira a aba Fiado', true), 2600);
@@ -1189,6 +1190,7 @@ function openProdForm(id){
     <label>Código de barras / referência</label>
     <div style="display:flex; gap:8px"><input id="pfCode" value="${p?esc(p.code||''):''}" placeholder="Digite ou escaneie" inputmode="numeric">
     <button class="btn sm cyan" style="flex:none" onclick="scanParaCadastro()">📷</button></div>
+    <label>NCM (para o cupom fiscal)</label><input id="pfNcm" value="${p?esc(p.ncm||''):''}" placeholder="8 números — peça ao seu contador" inputmode="numeric" maxlength="10">
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
       <div><label>Preço de custo (R$)</label><input id="pfCost" type="number" step="0.01" value="${p?p.cost||'':''}" placeholder="0,00"></div>
       <div><label>Preço de venda (R$) *</label><input id="pfPrice" type="number" step="0.01" value="${p?p.price:''}" placeholder="0,00"></div>
@@ -1217,10 +1219,10 @@ async function saveProd(id){
   if(!name||price<=0) return toast('Informe nome e preço de venda', true);
   if(id){
     const p = DB.products.find(x=>x.id===id);
-    Object.assign(p,{ name, cat:$('#pfCat').value, code:$('#pfCode').value.trim(), cost:num($('#pfCost').value), price, min:num($('#pfMin').value) });
+    Object.assign(p,{ name, cat:$('#pfCat').value, code:$('#pfCode').value.trim(), ncm:$('#pfNcm').value.replace(/\D/g,''), cost:num($('#pfCost').value), price, min:num($('#pfMin').value) });
   } else {
     const stock = Math.max(0, Math.round(num($('#pfStock').value)));
-    const p = { id:uid(), name, cat:$('#pfCat').value, code:$('#pfCode').value.trim(), cost:num($('#pfCost').value), price, stock, min:num($('#pfMin').value)||5 };
+    const p = { id:uid(), name, cat:$('#pfCat').value, code:$('#pfCode').value.trim(), ncm:$('#pfNcm').value.replace(/\D/g,''), cost:num($('#pfCost').value), price, stock, min:num($('#pfMin').value)||5 };
     DB.products.push(p);
     if(stock>0) DB.moves.unshift({ id:uid(), at:Date.now(), pid:p.id, name, type:'entrada', qty:stock, note:'Estoque inicial' });
   }
@@ -1321,7 +1323,7 @@ function lerXMLImport(txt, nomeArq){
     const code = ean || tag(prod,'cProd');
     const qty = Math.round(num(tag(prod,'qCom')));
     const cost = num(tag(prod,'vUnCom'));
-    if(qty>0) IMP.itens.push({ name: tag(prod,'xProd'), code, qty, cost, nf: nota });
+    if(qty>0) IMP.itens.push({ name: tag(prod,'xProd'), code, qty, cost, ncm: tag(prod,'NCM').replace(/\D/g,''), nf: nota });
   }
 }
 function lerCSVImport(txt, nomeArq){
@@ -1385,9 +1387,9 @@ async function confirmarImport(){
     const nota = i.nf ? ('NF '+(i.nf.numero||'?')+(i.nf.fornecedor?' - '+i.nf.fornecedor:'')) : 'Importação de planilha';
     let p = i.match ? DB.products.find(x=>x.id===i.match) : null;
     if(p){
-      p.stock += i.qty; if(IMP.updCost && i.cost>0) p.cost = i.cost; somados++;
+      p.stock += i.qty; if(IMP.updCost && i.cost>0) p.cost = i.cost; if(!p.ncm && i.ncm) p.ncm = i.ncm; somados++;
     } else {
-      p = { id:uid(), name:i.name, cat:'Outros', code:i.code, cost:i.cost, price:i.price, stock:i.qty, min:5 };
+      p = { id:uid(), name:i.name, cat:'Outros', code:i.code, ncm:i.ncm||'', cost:i.cost, price:i.price, stock:i.qty, min:5 };
       DB.products.push(p); novos++;
     }
     DB.moves.unshift({ id:uid(), at:Date.now(), pid:p.id, name:p.name, type:'entrada', qty:i.qty, note:nota });
@@ -1505,6 +1507,94 @@ function blingRetorno(){
   }catch(e){}
 }
 
+/* =================== CUPOM FISCAL (NFC-e via Bling) =================== */
+const NFCE_SIT = {1:'Pendente',2:'Cancelada',3:'Aguardando recibo',4:'Rejeitada',5:'Autorizada',6:'Emitida (DANFE)',7:'Registrada',8:'Aguardando protocolo',9:'Denegada',10:'Consultando situação',11:'Bloqueada'};
+function pagTipoBling(pay){ return { 'Dinheiro':1, 'Crédito':3, 'Débito':4, 'Pix':20 }[pay]; }
+function nfceBloco(s){
+  if(s.nfce){
+    const n = s.nfce, sit = NFCE_SIT[n.situacao] || ('Situação '+n.situacao);
+    const ok = n.situacao===5 || n.situacao===6 || n.situacao===7;
+    return `<div class="card" style="margin-bottom:10px; ${ok?'border-color:rgba(94,234,212,.5)':'border-color:rgba(242,193,78,.5)'}">
+      <div class="nm" style="font-weight:800">🧾 Cupom fiscal nº ${esc(n.numero||'?')} • série ${esc(n.serie||'?')}</div>
+      <div class="sb" style="margin:4px 0 8px"><span class="tag ${ok?'green':'amber'}">${esc(sit)}</span>${n.pendenteEnvio?' <span class="muted">criado no Bling, ainda não enviado à Sefaz</span>':''}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        ${n.link?`<button class="btn sm" onclick="window.open('${esc(n.link)}','_blank')">🔗 Abrir cupom</button>`:''}
+        ${n.pendenteEnvio?`<button class="btn sm cyan" onclick="reenviarNFCe('${s.id}')">📤 Enviar à Sefaz</button>`:''}
+        <button class="btn sm ghost" onclick="atualizarNFCe('${s.id}')">🔄 Atualizar situação</button>
+      </div></div>`;
+  }
+  if(s.cancelled) return '';
+  if(BLING.conectado===true){
+    if(!pagTipoBling(s.payment)) return `<div class="sb muted" style="margin-bottom:10px">Cupom fiscal ainda não disponível para venda no "${esc(s.payment)}".</div>`;
+    return `<button class="btn cyan block" style="margin-bottom:10px" onclick="emitirNFCe('${s.id}')">🧾 Emitir cupom fiscal (NFC-e)</button>`;
+  }
+  return '';
+}
+function erroBlingTexto(e){
+  try{
+    const er = (e && e.error) ? e.error : e;
+    const campos = (er.fields||[]).map(f=>'• '+(f.element?f.element+': ':'')+(f.msg||f.message||JSON.stringify(f))).join('\n');
+    return [er.message, er.description, campos].filter(Boolean).join('\n') || JSON.stringify(e);
+  }catch(x){ return String(e); }
+}
+function mostrarErroNFCe(titulo, d){
+  BLING_DIAG_TXT = titulo+'\n\n'+erroBlingTexto(d.erro)+'\n\n--- detalhe técnico ---\n'+JSON.stringify(d,null,1);
+  openModal(`
+    <h3>⚠️ ${esc(titulo)}</h3>
+    <pre style="white-space:pre-wrap; word-break:break-word; font-size:13px; background:var(--panel2); padding:12px; border-radius:10px; max-height:44vh; overflow:auto">${esc(erroBlingTexto(d.erro))}</pre>
+    <div style="height:10px"></div>
+    <button class="btn block" onclick="navigator.clipboard.writeText(BLING_DIAG_TXT).then(()=>toast('Copiado! Cole na conversa 📋'),()=>toast('Não consegui copiar — tire um print',true))">📋 Copiar erro completo</button>
+    <div style="height:8px"></div>
+    <button class="btn ghost block sm" onclick="closeModal()">Fechar</button>`);
+}
+async function chamarNFCe(body){
+  const r = await sb.functions.invoke('bling-nfce', { body });
+  if(r.error){
+    let msg=''; try{ const j = await r.error.context.json(); msg = j.erro||''; }catch(e){}
+    return { erro: msg || 'Não consegui falar com a função bling-nfce.' };
+  }
+  return r.data || {};
+}
+async function emitirNFCe(id){
+  const s = DB.sales.find(x=>x.id===id); if(!s || s.nfce || s.cancelled) return;
+  const tipo = pagTipoBling(s.payment);
+  if(!tipo) return toast('Cupom fiscal ainda não disponível para "'+s.payment+'"', true);
+  const itens = s.items.map(i=>{ const p = DB.products.find(x=>x.id===i.pid) || {}; return { codigo: p.code || i.pid || i.name, descricao: i.name, quantidade: i.qty, valor: i.price, ncm: p.ncm||'', unidade:'UN', origem:0 }; });
+  const semNcm = itens.filter(i=>!i.ncm).length;
+  if(!confirm('Emitir CUPOM FISCAL (NFC-e) desta venda de '+fmt(s.total)+'?\n\n'+(semNcm?'⚠️ '+semNcm+' item(ns) sem NCM — a Sefaz pode recusar.\n\n':'')+'Se o seu Bling estiver em produção, isto emite um documento fiscal de verdade.')) return;
+  toast('Emitindo cupom fiscal…');
+  let d;
+  try{ d = await chamarNFCe({ acao:'emitir', venda:{ itens, total:s.total, desconto:s.discount||0, tipoPagamento:tipo, nomePagamento:s.payment } }); }
+  catch(e){ return toast('Não consegui falar com o servidor.', true); }
+  if(typeof d.erro === 'string') return toast(d.erro, true);
+  if(d.etapa === 'criar') return mostrarErroNFCe('O Bling recusou criar o cupom', d);
+  if(d.etapa === 'enviar'){
+    const n = d.nota || {};
+    s.nfce = { id:d.id, numero:n.numero, serie:n.serie, situacao:n.situacao||1, link:n.linkDanfe||n.linkPDF||'', pendenteEnvio:true };
+    await saveDB();
+    return mostrarErroNFCe('Cupom criado no Bling, mas a Sefaz não aceitou o envio', d);
+  }
+  s.nfce = { id:d.id, numero:d.numero, serie:d.serie, situacao:d.situacao, chave:d.chave, link:d.linkDanfe||d.linkPDF||'' };
+  await saveDB(); openComprovante(id);
+  toast('Cupom fiscal enviado! 🧾');
+}
+async function reenviarNFCe(id){
+  const s = DB.sales.find(x=>x.id===id); if(!s||!s.nfce) return;
+  toast('Enviando à Sefaz…');
+  const d = await chamarNFCe({ acao:'enviar', id:s.nfce.id });
+  if(typeof d.erro === 'string') return toast(d.erro, true);
+  if(d.etapa === 'enviar') return mostrarErroNFCe('A Sefaz ainda não aceitou o cupom', d);
+  s.nfce = { id:d.id, numero:d.numero, serie:d.serie, situacao:d.situacao, chave:d.chave, link:d.linkDanfe||d.linkPDF||'' };
+  await saveDB(); openComprovante(id); toast('Cupom enviado! 🧾');
+}
+async function atualizarNFCe(id){
+  const s = DB.sales.find(x=>x.id===id); if(!s||!s.nfce) return;
+  const d = await chamarNFCe({ acao:'consultar', id:s.nfce.id });
+  if(typeof d.erro === 'string') return toast(d.erro, true);
+  s.nfce = Object.assign({}, s.nfce, { numero:d.numero||s.nfce.numero, serie:d.serie||s.nfce.serie, situacao:d.situacao, chave:d.chave||s.nfce.chave, link:d.linkDanfe||d.linkPDF||s.nfce.link, pendenteEnvio: d.situacao===1 ? s.nfce.pendenteEnvio : false });
+  await saveDB(); openComprovante(id); toast('Situação atualizada');
+}
+
 /* =================== COMPROVANTE DE VENDA =================== */
 function lojaCfg(){ return Object.assign({ razao:'', cnpj:'', end:'', fone:'', msg:'Obrigado pela preferência! Volte sempre.', largura:'80', perguntar:true }, DB.loja||{}); }
 function openLojaCfgForm(){
@@ -1598,6 +1688,7 @@ function openComprovante(id){
   openModal(`
     <h3>🧾 Comprovante de venda</h3>
     <div style="background:#fff; border-radius:10px; padding:14px 12px; margin:10px 0; max-height:48vh; overflow:auto"><style>${RECIBO_CSS}</style><div class="rc" style="max-width:340px; margin:0 auto">${reciboHTML(s)}</div></div>
+    ${nfceBloco(s)}
     <div style="display:flex; gap:8px; flex-wrap:wrap">
       <button class="btn" style="flex:1" onclick="imprimirComprovante('${id}')">🖨️ Imprimir</button>
       <button class="btn cyan" style="flex:1" onclick="baixarComprovantePDF('${id}')">📤 PDF / WhatsApp</button>
